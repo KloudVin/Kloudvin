@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog — KloudVin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Sora:wght@300;400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="content">
+  <section class="section" style="padding-top:8rem">
+    <div class="section-head"><span class="section-tag">// all articles</span><h2 class="section-title">Blog</h2><p class="section-sub">Every article — from cloud architecture to shell scripting</p></div>
+    <div style="display:flex;justify-content:center;flex-wrap:wrap;gap:.5rem;margin-bottom:3rem" id="filterBar"></div>
+    <div class="posts-wrap" id="postsGrid"></div>
+  </section>
+</div>
+<script src="../js/app.js"></script>
+<script src="../js/components.js"></script>
+<script>
+loadComponents(true);
+renderPostsSub('postsGrid');
+var el=document.getElementById('nav-blog');if(el)el.classList.add('active');
+var cats=['All','Cloud','DevOps','Kubernetes','Networking','Linux','IaC'];
+var icons={All:'',Cloud:'☁️ ',DevOps:'♾️ ',Kubernetes:'☸ ',Networking:'🔒 ',Linux:'🐧 ',IaC:'📦 '};
+var bar=document.getElementById('filterBar');
+cats.forEach(function(c){
+  var btn=document.createElement('button');btn.textContent=icons[c]+c;
+  btn.style.cssText='padding:.45rem 1rem;border-radius:20px;font-size:.8rem;font-weight:600;cursor:pointer;transition:all .3s;'+(c==='All'?'background:rgba(0,240,255,.1);border:1px solid rgba(0,240,255,.25);color:#00f0ff':'background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);color:#64748b');
+  btn.onclick=function(){
+    bar.querySelectorAll('button').forEach(function(b){b.style.background='rgba(255,255,255,.03)';b.style.border='1px solid rgba(255,255,255,.06)';b.style.color='#64748b';});
+    btn.style.background='rgba(0,240,255,.1)';btn.style.border='1px solid rgba(0,240,255,.25)';btn.style.color='#00f0ff';
+    var grid=document.getElementById('postsGrid');grid.innerHTML='';
+    var list=c==='All'?articles:articles.filter(function(a){return a.category===c});
+    if(!list.length){grid.innerHTML='<div style="text-align:center;color:#475569;padding:3rem;grid-column:1/-1"><i class="fas fa-folder-open" style="font-size:2rem;margin-bottom:1rem;display:block;color:#00f0ff"></i>No articles yet.</div>';return;}
+    list.forEach(function(a){var cc=categoryColors[a.category]||categoryColors.Cloud;var icon=categoryIcons[a.category]||'fa-file-alt';var card=document.createElement('div');card.className='pcard';card.onclick=function(){window.location.href='article.html?id='+a.id};card.innerHTML='<div class="pcard-thumb" style="background:'+cc.thumb+';color:'+cc.color+'"><i class="fas '+icon+'"></i></div><div class="pcard-body"><div class="pcard-meta"><span class="pcard-cat" style="background:'+cc.bg+';color:'+cc.color+'">'+a.category+'</span><span class="pcard-date">'+a.date+'</span></div><h3>'+a.title+'</h3><p>'+a.desc+'</p><div class="pcard-foot"><span class="pcard-time"><i class="far fa-clock"></i> '+a.readTime+'</span><span class="pcard-read">Read <i class="fas fa-arrow-right"></i></span></div></div>';grid.appendChild(card)});
+  };bar.appendChild(btn);
+});
+</script>
+</body></html>
