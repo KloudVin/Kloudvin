@@ -469,6 +469,101 @@ body.admin-mode .admin-only { display:inline-flex !important; }
 .btn-preview-ed:hover { background:rgba(0,240,255,.06); }
 
 /* ================================================================
+   EDITOR MODE TOGGLE
+   ================================================================ */
+.editor-mode-toggle {
+  display:flex; gap:4px; margin-bottom:1.5rem;
+  background:var(--bg-void); border-radius:var(--radius-sm); padding:4px;
+  border:1px solid var(--border-subtle);
+}
+.mode-btn {
+  flex:1; padding:.7rem; border:none; border-radius:6px;
+  font-size:.82rem; font-weight:600; cursor:pointer; transition:all .3s;
+  display:flex; align-items:center; justify-content:center; gap:.5rem;
+  background:transparent; color:var(--text-dim);
+}
+.mode-btn:hover { color:var(--text-light); }
+.mode-btn.active {
+  background:linear-gradient(135deg, rgba(0,240,255,.12), rgba(59,130,246,.12));
+  color:var(--neon-cyan); box-shadow:0 2px 12px rgba(0,240,255,.1);
+}
+
+/* ================================================================
+   UPLOAD ZONE
+   ================================================================ */
+.upload-zone {
+  border:2px dashed rgba(255,255,255,.08); border-radius:var(--radius-md);
+  background:rgba(255,255,255,.015); transition:all .35s; position:relative;
+  cursor:pointer;
+}
+.upload-zone:hover, .upload-zone.dragover {
+  border-color:var(--neon-cyan); background:rgba(0,240,255,.03);
+}
+.upload-zone.dragover { box-shadow:0 0 30px rgba(0,240,255,.08); }
+.upload-zone-inner {
+  padding:2.5rem 1.5rem; text-align:center;
+}
+.upload-icon {
+  width:64px; height:64px; border-radius:50%; margin:0 auto 1rem;
+  background:rgba(0,240,255,.06); border:1px solid rgba(0,240,255,.12);
+  display:flex; align-items:center; justify-content:center;
+  font-size:1.6rem; color:var(--neon-cyan); transition:transform .3s;
+}
+.upload-zone:hover .upload-icon { transform:translateY(-3px); }
+.upload-zone.dragover .upload-icon { transform:scale(1.1); animation:pulse-glow 1s ease infinite; }
+@keyframes pulse-glow { 0%,100%{box-shadow:0 0 10px rgba(0,240,255,.1)} 50%{box-shadow:0 0 25px rgba(0,240,255,.25)} }
+.upload-title { font-size:1rem; font-weight:600; color:var(--text-light); margin-bottom:.3rem; }
+.upload-sub { font-size:.85rem; color:var(--text-dim); }
+.upload-browse { color:var(--neon-cyan); cursor:pointer; text-decoration:underline; text-underline-offset:3px; font-weight:600; }
+.upload-browse:hover { color:#3bdcff; }
+.upload-formats {
+  margin-top:1rem; font-family:'Fira Code',monospace; font-size:.7rem;
+  color:var(--text-dim); display:flex; align-items:center; justify-content:center; gap:.3rem;
+}
+
+/* Uploaded file info card */
+.upload-file-info {
+  display:flex; align-items:center; gap:1rem; padding:1rem 1.2rem;
+  background:var(--bg-surface); border:1px solid rgba(16,185,129,.2);
+  border-radius:var(--radius-md); margin-top:.8rem;
+  animation:slideIn .3s ease;
+}
+@keyframes slideIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+.upload-file-icon {
+  width:42px; height:42px; border-radius:var(--radius-sm); flex-shrink:0;
+  background:rgba(0,240,255,.06); border:1px solid rgba(0,240,255,.12);
+  display:flex; align-items:center; justify-content:center;
+  font-size:1.1rem; color:var(--neon-cyan);
+}
+.upload-file-details { flex:1; display:flex; flex-direction:column; min-width:0; }
+.upload-file-name {
+  font-size:.88rem; font-weight:600; color:var(--text-white);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.upload-file-size { font-family:'Fira Code',monospace; font-size:.72rem; color:var(--text-dim); }
+.upload-file-status {
+  font-family:'Fira Code',monospace; font-size:.75rem;
+  color:var(--neon-emerald); display:flex; align-items:center; gap:.3rem; flex-shrink:0;
+}
+.upload-file-status.processing { color:var(--neon-amber); }
+.upload-file-status.error { color:var(--neon-rose); }
+.upload-file-remove {
+  width:30px; height:30px; border-radius:6px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(244,63,94,.06); border:1px solid rgba(244,63,94,.15);
+  color:var(--neon-rose); font-size:.8rem; cursor:pointer; transition:all .3s;
+}
+.upload-file-remove:hover { background:rgba(244,63,94,.12); border-color:rgba(244,63,94,.3); }
+
+/* Upload content preview */
+.upload-preview {
+  background:var(--bg-void); border:1px solid var(--border-subtle);
+  border-radius:var(--radius-sm); padding:1.2rem; max-height:300px;
+  overflow-y:auto; font-family:'Fira Code',monospace; font-size:.82rem;
+  color:var(--text-light); line-height:1.7; white-space:pre-wrap; word-break:break-word;
+}
+
+/* ================================================================
    ARTICLE PAGE
    ================================================================ */
 .article-hero {

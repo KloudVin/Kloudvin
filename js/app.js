@@ -172,6 +172,302 @@ function logoutAdmin() {
 
 // ---- EDITOR ----
 let currentTags = [];
+let editorMode = 'write'; // 'write' or 'upload'
+let uploadedFileContent = null; // stores parsed content from uploaded file
+
+function switchEditorMode(mode) {
+  editorMode = mode;
+  const writeEl = document.getElementById('writeMode');
+  const uploadEl = document.getElementById('uploadMode');
+  const btnW = document.getElementById('modeWrite');
+  const btnU = document.getElementById('modeUpload');
+  if (!writeEl || !uploadEl) return;
+
+  if (mode === 'write') {
+    writeEl.style.display = '';
+    uploadEl.style.display = 'none';
+    btnW.classList.add('active'); btnU.classList.remove('active');
+  } else {
+    writeEl.style.display = 'none';
+    uploadEl.style.display = '';
+    btnU.classList.add('active'); btnW.classList.remove('active');
+    initUploadZone();
+  }
+}
+
+function initUploadZone() {
+  const zone = document.getElementById('uploadZone');
+  const fileInput = document.getElementById('fileInput');
+  if (!zone || zone._initialized) return;
+  zone._initialized = true;
+
+  // Click to browse
+  zone.addEventListener('click', function(e) {
+    if (e.target.closest('.upload-browse') || e.target === zone || e.target.closest('.upload-zone-inner')) {
+      fileInput.click();
+    }
+  });
+
+  // File input change
+  fileInput.addEventListener('change', function() {
+    if (this.files.length) handleFileUpload(this.files[0]);
+  });
+
+  // Drag & Drop
+  zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', function() { zone.classList.remove('dragover'); });
+  zone.addEventListener('drop', function(e) {
+    e.preventDefault(); zone.classList.remove('dragover');
+    if (e.dataTransfer.files.length) handleFileUpload(e.dataTransfer.files[0]);
+  });
+}
+
+function handleFileUpload(file) {
+  const allowedExts = ['.md','.txt','.html','.htm','.doc','.docx'];
+  const ext = '.' + file.name.split('.').pop().toLowerCase();
+
+  if (!allowedExts.includes(ext)) {
+    showToast('Unsupported file type. Use .md, .txt, .html, or .docx', true);
+    return;
+  }
+
+  // Show file info card
+  const zone = document.getElementById('uploadZone');
+  const info = document.getElementById('uploadFileInfo');
+  const nameEl = document.getElementById('uploadFileName');
+  const sizeEl = document.getElementById('uploadFileSize');
+  const statusEl = document.getElementById('uploadFileStatus');
+  const iconEl = document.getElementById('uploadFileIcon');
+
+  zone.style.display = 'none';
+  info.style.display = 'flex';
+  nameEl.textContent = file.name;
+  sizeEl.textContent = formatFileSize(file.size);
+  statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+  statusEl.className = 'upload-file-status processing';
+
+  // Set icon based on type
+  const iconMap = { '.md':'fa-file-lines', '.txt':'fa-file-lines', '.html':'fa-code', '.htm':'fa-code', '.doc':'fa-file-word', '.docx':'fa-file-word' };
+  iconEl.innerHTML = '<i class="fas ' + (iconMap[ext] || 'fa-file') + '"></i>';
+
+  // Read file content
+  if (ext === '.docx' || ext === '.doc') {
+    readDocxFile(file, statusEl);
+  } else {
+    readTextFile(file, ext, statusEl);
+  }
+}
+
+function readTextFile(file, ext, statusEl) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    let content = e.target.result;
+
+    // If HTML, extract body text and convert to basic markdown
+    if (ext === '.html' || ext === '.htm') {
+      content = htmlToMarkdown(content);
+    }
+
+    uploadedFileContent = content;
+    statusEl.innerHTML = '<i class="fas fa-check-circle"></i> Ready';
+    statusEl.className = 'upload-file-status';
+
+    // Show preview
+    showUploadPreview(content);
+
+    // Auto-fill title if empty
+    autoFillFromContent(content);
+
+    showToast('File loaded successfully! ✅');
+  };
+  reader.onerror = function() {
+    statusEl.innerHTML = '<i class="fas fa-times-circle"></i> Error';
+    statusEl.className = 'upload-file-status error';
+    showToast('Failed to read file', true);
+  };
+  reader.readAsText(file);
+}
+
+function readDocxFile(file, statusEl) {
+  // Use a simple zip-based approach to extract text from docx
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const arrayBuffer = e.target.result;
+      extractDocxText(arrayBuffer).then(function(text) {
+        uploadedFileContent = text;
+        statusEl.innerHTML = '<i class="fas fa-check-circle"></i> Ready';
+        statusEl.className = 'upload-file-status';
+        showUploadPreview(text);
+        autoFillFromContent(text);
+        showToast('DOCX content extracted! ✅');
+      }).catch(function(err) {
+        // Fallback: read as text
+        uploadedFileContent = '[Could not fully parse DOCX. Please use .md or .txt format for best results.]';
+        statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Partial';
+        statusEl.className = 'upload-file-status processing';
+        showUploadPreview(uploadedFileContent);
+        showToast('DOCX parsing limited. Try .md or .txt for best results.', true);
+      });
+    } catch(err) {
+      statusEl.innerHTML = '<i class="fas fa-times-circle"></i> Error';
+      statusEl.className = 'upload-file-status error';
+      showToast('Failed to read DOCX file', true);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// Basic DOCX text extraction using JSZip-like manual approach
+async function extractDocxText(arrayBuffer) {
+  // DOCX is a ZIP containing XML files. We'll extract document.xml text.
+  const bytes = new Uint8Array(arrayBuffer);
+
+  // Find the PK zip entries and locate word/document.xml
+  const text = await new Promise(function(resolve, reject) {
+    try {
+      // Use the simpler approach: parse XML directly from the blob
+      const blob = new Blob([arrayBuffer], { type: 'application/zip' });
+
+      // Try using the browser's built-in decompression if available
+      if (typeof DecompressionStream !== 'undefined') {
+        // Modern approach - but DOCX needs zip extraction, not just decompression
+      }
+
+      // Fallback: basic text extraction by scanning for readable content between XML tags
+      const decoder = new TextDecoder('utf-8', { fatal: false });
+      const rawText = decoder.decode(bytes);
+
+      // Extract text from w:t tags (Word's text tags)
+      const matches = rawText.match(/<w:t[^>]*>([^<]*)<\/w:t>/g);
+      if (matches && matches.length > 0) {
+        let extracted = '';
+        let prevWasSpace = false;
+        matches.forEach(function(m) {
+          const inner = m.replace(/<w:t[^>]*>/, '').replace(/<\/w:t>/, '');
+          if (inner === ' ' && prevWasSpace) return;
+          extracted += inner;
+          prevWasSpace = (inner === ' ');
+        });
+
+        // Try to add paragraph breaks where XML shows paragraph markers
+        const withParagraphs = rawText.replace(/<w:p [^>]*\/>/g, '\n').replace(/<w:p[ >]/g, '\n<w:p ');
+        const pMatches = withParagraphs.match(/<w:t[^>]*>([^<]*)<\/w:t>/g);
+        if (pMatches) {
+          let result = '';
+          let pos = 0;
+          const pBreaks = [];
+          let searchText = withParagraphs;
+          let pIdx = searchText.indexOf('\n<w:p ');
+          while (pIdx !== -1) {
+            pBreaks.push(pIdx);
+            pIdx = searchText.indexOf('\n<w:p ', pIdx + 1);
+          }
+
+          // Simple: just use the extracted text with line breaks from paragraphs
+          resolve(extracted.replace(/(.{80,}?[\.\!\?])\s/g, '$1\n\n'));
+          return;
+        }
+
+        resolve(extracted);
+      } else {
+        reject(new Error('No text content found in DOCX'));
+      }
+    } catch(e) {
+      reject(e);
+    }
+  });
+
+  return text;
+}
+
+function htmlToMarkdown(html) {
+  // Extract body content if present
+  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  let content = bodyMatch ? bodyMatch[1] : html;
+
+  // Strip style/script tags
+  content = content.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+  content = content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+
+  // Convert common HTML to Markdown
+  content = content.replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1\n\n');
+  content = content.replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n\n');
+  content = content.replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n\n');
+  content = content.replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**');
+  content = content.replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**');
+  content = content.replace(/<em[^>]*>(.*?)<\/em>/gi, '*$1*');
+  content = content.replace(/<i[^>]*>(.*?)<\/i>/gi, '*$1*');
+  content = content.replace(/<code[^>]*>(.*?)<\/code>/gi, '`$1`');
+  content = content.replace(/<pre[^>]*>(.*?)<\/pre>/gis, '```\n$1\n```\n');
+  content = content.replace(/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, '[$2]($1)');
+  content = content.replace(/<li[^>]*>(.*?)<\/li>/gi, '- $1\n');
+  content = content.replace(/<br\s*\/?>/gi, '\n');
+  content = content.replace(/<p[^>]*>(.*?)<\/p>/gis, '$1\n\n');
+  content = content.replace(/<blockquote[^>]*>(.*?)<\/blockquote>/gis, '> $1\n');
+
+  // Strip remaining HTML tags
+  content = content.replace(/<[^>]+>/g, '');
+
+  // Clean up whitespace
+  content = content.replace(/\n{3,}/g, '\n\n').trim();
+
+  return content;
+}
+
+function showUploadPreview(content) {
+  const group = document.getElementById('uploadPreviewGroup');
+  const preview = document.getElementById('uploadPreview');
+  if (!group || !preview) return;
+  group.style.display = '';
+  // Show first 2000 chars with ellipsis
+  const truncated = content.length > 2000 ? content.substring(0, 2000) + '\n\n... (' + content.length + ' total characters)' : content;
+  preview.textContent = truncated;
+}
+
+function autoFillFromContent(content) {
+  // If title is empty, try extracting first heading
+  const titleInput = document.getElementById('artTitle');
+  if (titleInput && !titleInput.value.trim()) {
+    const h1Match = content.match(/^#\s+(.+)$/m);
+    const h2Match = content.match(/^##\s+(.+)$/m);
+    const firstLine = content.split('\n').find(function(l) { return l.trim().length > 5; });
+    if (h1Match) titleInput.value = h1Match[1].trim();
+    else if (h2Match) titleInput.value = h2Match[1].trim();
+    else if (firstLine && firstLine.length < 120) titleInput.value = firstLine.trim();
+  }
+
+  // If description is empty, try extracting first paragraph
+  const descInput = document.getElementById('artDesc');
+  if (descInput && !descInput.value.trim()) {
+    const lines = content.split('\n').filter(function(l) {
+      const t = l.trim();
+      return t.length > 20 && !t.startsWith('#') && !t.startsWith('```') && !t.startsWith('>') && !t.startsWith('-');
+    });
+    if (lines.length) {
+      const firstPara = lines[0].trim();
+      descInput.value = firstPara.length > 160 ? firstPara.substring(0, 157) + '...' : firstPara;
+    }
+  }
+}
+
+function removeUploadedFile() {
+  uploadedFileContent = null;
+  const zone = document.getElementById('uploadZone');
+  const info = document.getElementById('uploadFileInfo');
+  const previewGroup = document.getElementById('uploadPreviewGroup');
+  const fileInput = document.getElementById('fileInput');
+  if (zone) zone.style.display = '';
+  if (info) info.style.display = 'none';
+  if (previewGroup) previewGroup.style.display = 'none';
+  if (fileInput) fileInput.value = '';
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
 
 function openEditor() {
   const panel = document.getElementById('editorPanel');
@@ -179,6 +475,9 @@ function openEditor() {
   if (panel) panel.classList.add('open');
   if (overlay) overlay.classList.add('open');
   document.body.style.overflow = 'hidden';
+  // Reset to write mode and clear upload state
+  switchEditorMode('write');
+  removeUploadedFile();
 }
 
 function closeEditor() {
@@ -241,10 +540,19 @@ function publishArticle() {
   const category = document.getElementById('artCategory').value;
   const readTime = document.getElementById('artReadTime').value;
   const desc = document.getElementById('artDesc').value.trim();
-  const content = document.getElementById('artContent').value.trim();
+
+  // Get content from either write mode or upload mode
+  let content;
+  if (editorMode === 'upload') {
+    if (!uploadedFileContent) { showToast('Please upload a file first!', true); return; }
+    content = uploadedFileContent;
+  } else {
+    content = document.getElementById('artContent').value.trim();
+  }
 
   if (!title) { showToast('Please enter an article title!', true); return; }
   if (!desc) { showToast('Please enter a short description!', true); return; }
+  if (!content) { showToast('Please add article content — write or upload a file!', true); return; }
 
   const now = new Date();
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -260,8 +568,10 @@ function publishArticle() {
   document.getElementById('artContent').value = '';
   currentTags = [];
   renderTags();
+  removeUploadedFile();
+  switchEditorMode('write');
   closeEditor();
-  showToast('Article published successfully! 🎉');
+  showToast('Article published to "' + category + '" topic! 🎉');
 
   // Re-render
   const postsGrid = document.getElementById('postsGrid');

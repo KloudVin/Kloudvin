@@ -111,13 +111,20 @@ function loadComponents(isSubPage) {
       <h2><i class="fas fa-pen-to-square"></i> New Article</h2>
       <button class="editor-close" onclick="closeEditor()"><i class="fas fa-xmark"></i></button>
     </div>
+
+    <!-- MODE TOGGLE -->
+    <div class="editor-mode-toggle">
+      <button class="mode-btn active" id="modeWrite" onclick="switchEditorMode('write')"><i class="fas fa-keyboard"></i> Write</button>
+      <button class="mode-btn" id="modeUpload" onclick="switchEditorMode('upload')"><i class="fas fa-cloud-arrow-up"></i> Upload File</button>
+    </div>
+
     <div class="form-group">
       <label class="form-label">Article Title</label>
       <input class="form-input" id="artTitle" placeholder="e.g. How to Deploy EKS with Terraform">
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Category</label>
+        <label class="form-label">Category / Topic</label>
         <select class="form-select" id="artCategory">
           <option value="Cloud">☁️ Cloud</option>
           <option value="DevOps">♾️ DevOps & CI/CD</option>
@@ -150,24 +157,62 @@ function loadComponents(isSubPage) {
       </div>
       <div class="form-hint"><i class="fas fa-circle-info"></i> Press Enter after each tag</div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Article Content</label>
-      <div class="toolbar">
-        <button title="Bold" onclick="insertMd('**','**')"><i class="fas fa-bold"></i></button>
-        <button title="Italic" onclick="insertMd('*','*')"><i class="fas fa-italic"></i></button>
-        <button title="Code" onclick="insertMd('\`','\`')"><i class="fas fa-code"></i></button>
-        <div class="toolbar-sep"></div>
-        <button title="Heading" onclick="insertMd('\\n## ','')"><i class="fas fa-heading"></i></button>
-        <button title="Bullet list" onclick="insertMd('\\n- ','')"><i class="fas fa-list-ul"></i></button>
-        <button title="Numbered list" onclick="insertMd('\\n1. ','')"><i class="fas fa-list-ol"></i></button>
-        <div class="toolbar-sep"></div>
-        <button title="Code block" onclick="insertMd('\\n\`\`\`\\n','\\n\`\`\`')"><i class="fas fa-terminal"></i></button>
-        <button title="Link" onclick="insertMd('[','](url)')"><i class="fas fa-link"></i></button>
-        <button title="Quote" onclick="insertMd('\\n> ','')"><i class="fas fa-quote-left"></i></button>
+
+    <!-- ========== WRITE MODE ========== -->
+    <div id="writeMode">
+      <div class="form-group">
+        <label class="form-label">Article Content</label>
+        <div class="toolbar">
+          <button title="Bold" onclick="insertMd('**','**')"><i class="fas fa-bold"></i></button>
+          <button title="Italic" onclick="insertMd('*','*')"><i class="fas fa-italic"></i></button>
+          <button title="Code" onclick="insertMd('\`','\`')"><i class="fas fa-code"></i></button>
+          <div class="toolbar-sep"></div>
+          <button title="Heading" onclick="insertMd('\\n## ','')"><i class="fas fa-heading"></i></button>
+          <button title="Bullet list" onclick="insertMd('\\n- ','')"><i class="fas fa-list-ul"></i></button>
+          <button title="Numbered list" onclick="insertMd('\\n1. ','')"><i class="fas fa-list-ol"></i></button>
+          <div class="toolbar-sep"></div>
+          <button title="Code block" onclick="insertMd('\\n\`\`\`\\n','\\n\`\`\`')"><i class="fas fa-terminal"></i></button>
+          <button title="Link" onclick="insertMd('[','](url)')"><i class="fas fa-link"></i></button>
+          <button title="Quote" onclick="insertMd('\\n> ','')"><i class="fas fa-quote-left"></i></button>
+        </div>
+        <textarea class="form-textarea" id="artContent" placeholder="Write your article in Markdown...&#10;&#10;## Introduction&#10;Start writing here...&#10;&#10;\`\`\`bash&#10;kubectl apply -f deploy.yaml&#10;\`\`\`"></textarea>
+        <div class="form-hint"><i class="fas fa-circle-info"></i> Supports Markdown: **bold**, *italic*, \`code\`, ## headings</div>
       </div>
-      <textarea class="form-textarea" id="artContent" placeholder="Write your article in Markdown...&#10;&#10;## Introduction&#10;Start writing here...&#10;&#10;\`\`\`bash&#10;kubectl apply -f deploy.yaml&#10;\`\`\`"></textarea>
-      <div class="form-hint"><i class="fas fa-circle-info"></i> Supports Markdown: **bold**, *italic*, \`code\`, ## headings</div>
     </div>
+
+    <!-- ========== UPLOAD MODE ========== -->
+    <div id="uploadMode" style="display:none">
+      <div class="form-group">
+        <label class="form-label">Upload Article File</label>
+        <div class="upload-zone" id="uploadZone">
+          <input type="file" id="fileInput" accept=".md,.txt,.html,.htm,.doc,.docx" style="display:none">
+          <div class="upload-zone-inner" id="uploadZoneInner">
+            <div class="upload-icon"><i class="fas fa-cloud-arrow-up"></i></div>
+            <p class="upload-title">Drag & drop your file here</p>
+            <p class="upload-sub">or <span class="upload-browse" onclick="document.getElementById('fileInput').click()">browse files</span></p>
+            <div class="upload-formats"><i class="fas fa-file-lines"></i> .md &nbsp; <i class="fas fa-file-lines"></i> .txt &nbsp; <i class="fas fa-code"></i> .html &nbsp; <i class="fas fa-file-word"></i> .docx</div>
+          </div>
+        </div>
+        <!-- File preview after upload -->
+        <div class="upload-file-info" id="uploadFileInfo" style="display:none">
+          <div class="upload-file-icon" id="uploadFileIcon"><i class="fas fa-file-lines"></i></div>
+          <div class="upload-file-details">
+            <span class="upload-file-name" id="uploadFileName">document.md</span>
+            <span class="upload-file-size" id="uploadFileSize">12.4 KB</span>
+          </div>
+          <div class="upload-file-status" id="uploadFileStatus"><i class="fas fa-check-circle"></i> Ready</div>
+          <button class="upload-file-remove" onclick="removeUploadedFile()" title="Remove file"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="form-hint"><i class="fas fa-circle-info"></i> Markdown (.md) and text (.txt) files are recommended. HTML is supported. For .docx, text content will be extracted.</div>
+      </div>
+
+      <!-- Content preview from uploaded file -->
+      <div class="form-group" id="uploadPreviewGroup" style="display:none">
+        <label class="form-label">Content Preview <span style="color:var(--neon-cyan);font-size:.7rem;text-transform:none;letter-spacing:0">(extracted from file)</span></label>
+        <div class="upload-preview" id="uploadPreview"></div>
+      </div>
+    </div>
+
     <div class="editor-actions">
       <button class="btn-preview-ed" onclick="previewArticle()"><i class="fas fa-eye"></i> Preview</button>
       <button class="btn-publish" onclick="publishArticle()"><i class="fas fa-paper-plane"></i> Publish</button>
@@ -181,7 +226,12 @@ function loadComponents(isSubPage) {
 
 function previewArticle() {
   const title = document.getElementById('artTitle').value.trim() || 'Untitled';
-  const content = document.getElementById('artContent').value.trim() || 'No content yet...';
+  let content;
+  if (editorMode === 'upload' && uploadedFileContent) {
+    content = uploadedFileContent;
+  } else {
+    content = document.getElementById('artContent').value.trim() || 'No content yet...';
+  }
   const w = window.open('','_blank');
   w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Preview</title>
   <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Sora:wght@600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
