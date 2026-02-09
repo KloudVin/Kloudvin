@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Article — KloudVin</title>
+  <link rel="icon" type="image/x-icon" href="../favicon.ico">
+  <link rel="apple-touch-icon" href="../favicon.png">
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Sora:wght@300;400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="content">
+
+  <!-- Article Hero -->
+  <div class="article-hero" id="articleHero">
+    <span class="pcard-cat" id="artCat" style="display:inline-block"></span>
+    <h1 id="artTitle">Loading...</h1>
+    <div class="article-meta" id="artMeta"></div>
+  </div>
+
+  <!-- Article Content -->
+  <div class="article-content" id="articleBody">
+    <p>Loading article...</p>
+  </div>
+
+  <!-- Tags -->
+  <div style="max-width:780px;margin:2rem auto;padding:0 2rem;display:flex;flex-wrap:wrap;gap:.4rem" id="artTags"></div>
+
+  <!-- Author Card -->
+  <div class="article-author">
+    <div class="article-author-avatar">VH</div>
+    <div class="article-author-info">
+      <h4>Written by <span style="color:var(--neon-cyan)">Vinod H</span></h4>
+      <p>Senior Cloud Architect with 22+ years of experience. Azure & AWS Expert, DevOps & SRE Strategist. Sharing practical knowledge from enterprise environments.</p>
+    </div>
+  </div>
+
+  <!-- More Articles -->
+  <section class="section">
+    <div class="section-head">
+      <span class="section-tag">// more articles</span>
+      <h2 class="section-title">Keep Reading</h2>
+    </div>
+    <div class="posts-wrap" id="postsGrid"></div>
+  </section>
+
+</div>
+
+<script src="../js/app.js"></script>
+<script src="../js/components.js"></script>
+<script>
+loadComponents(true);
+
+// Get article ID from URL
+var params = new URLSearchParams(window.location.search);
+var artId = params.get('id');
+var article = articles.find(function(a) { return a.id === artId; });
+
+if (article) {
+  document.title = article.title + ' — KloudVin';
+  var cc = categoryColors[article.category] || categoryColors.Cloud;
+
+  document.getElementById('artCat').textContent = article.category;
+  document.getElementById('artCat').style.background = cc.bg;
+  document.getElementById('artCat').style.color = cc.color;
+
+  document.getElementById('artTitle').textContent = article.title;
+
+  document.getElementById('artMeta').innerHTML =
+    '<span><i class="fas fa-calendar-alt"></i> ' + article.date + '</span>' +
+    '<span><i class="fas fa-clock"></i> ' + article.readTime + '</span>' +
+    '<span><i class="fas fa-user"></i> Vinod</span>';
+
+  document.getElementById('articleBody').innerHTML = renderMarkdown(article.content || '');
+
+  // Tags
+  var tagsEl = document.getElementById('artTags');
+  if (article.tags && article.tags.length) {
+    article.tags.forEach(function(t) {
+      var s = document.createElement('span');
+      s.className = 'tag-pill';
+      s.textContent = t;
+      tagsEl.appendChild(s);
+    });
+  }
+} else {
+  document.getElementById('artTitle').textContent = 'Article Not Found';
+  document.getElementById('articleBody').innerHTML = '<p>Sorry, this article could not be found. <a href="blog.html" style="color:var(--neon-cyan)">Browse all articles →</a></p>';
+}
+
+// Show other articles (excluding current)
+var others = articles.filter(function(a) { return a.id !== artId; }).slice(0, 3);
+var grid = document.getElementById('postsGrid');
+others.forEach(function(a) {
+  var cc = categoryColors[a.category] || categoryColors.Cloud;
+  var icon = categoryIcons[a.category] || 'fa-file-alt';
+  var card = document.createElement('div');
+  card.className = 'pcard';
+  card.onclick = function() { window.location.href = 'article.html?id=' + a.id; };
+  card.innerHTML = '<div class="pcard-thumb" style="background:'+cc.thumb+';color:'+cc.color+'"><i class="fas '+icon+'"></i></div><div class="pcard-body"><div class="pcard-meta"><span class="pcard-cat" style="background:'+cc.bg+';color:'+cc.color+'">'+a.category+'</span><span class="pcard-date">'+a.date+'</span></div><h3>'+a.title+'</h3><p>'+a.desc+'</p><div class="pcard-foot"><span class="pcard-time"><i class="far fa-clock"></i> '+a.readTime+'</span><span class="pcard-read">Read <i class="fas fa-arrow-right"></i></span></div></div>';
+  grid.appendChild(card);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,170 @@
+# ================================================================
+# KloudVin — Azure DevOps Pipeline
+# Deploy to Azure Static Web Apps
+# ================================================================
+# 
+# PREREQUISITES:
+#   1. Azure Static Web App resource created in Azure Portal
+#   2. Variable group "Kloudvin-deploy" linked to this pipeline
+#   3. Deployment token stored in the variable group
+#
+# TRIGGER: Runs on every push to 'main' branch
+# ================================================================
+
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: Kloudvin-deploy
+
+stages:
+
+# ================================================================
+# STAGE 1: BUILD & DEPLOY
+# ================================================================
+- stage: BuildAndDeploy
+  displayName: '🚀 Build & Deploy'
+  jobs:
+  - job: DeployJob
+    displayName: 'Validate & Deploy to Azure Static Web Apps'
+    steps:
+
+    - checkout: self
+      displayName: '📥 Checkout Repository'
+
+    # ---- VALIDATE FILES ----
+    - script: |
+        echo "========================================="
+        echo "  KloudVin — Build Validation"
+        echo "========================================="
+        echo ""
+        echo "📁 Project structure:"
+        find . -not -path './.git/*' -not -name '.git' | head -50
+        echo ""
+        echo "📄 Checking required files..."
+        
+        ERRORS=0
+        for file in index.html css/style.css js/app.js js/components.js pages/blog.html pages/about.html pages/article.html staticwebapp.config.json; do
+          if [ -f "$file" ]; then
+            echo "  ✅ $file"
+          else
+            echo "  ❌ MISSING: $file"
+            ERRORS=$((ERRORS + 1))
+          fi
+        done
+        
+        echo ""
+        HTML_COUNT=$(find . -name "*.html" -not -path "./.git/*" | wc -l)
+        CSS_COUNT=$(find . -name "*.css" -not -path "./.git/*" | wc -l)
+        JS_COUNT=$(find . -name "*.js" -not -path "./.git/*" | wc -l)
+        echo "📊 Assets: $HTML_COUNT HTML, $CSS_COUNT CSS, $JS_COUNT JS"
+        echo ""
+        
+        if [ $ERRORS -gt 0 ]; then
+          echo "❌ Validation FAILED — $ERRORS missing file(s)"
+          exit 1
+        else
+          echo "✅ Validation PASSED"
+        fi
+      displayName: '✅ Validate Project Files'
+      workingDirectory: '$(Build.SourcesDirectory)'
+
+    # ---- DEBUG: Print working directory (helps troubleshoot path issues) ----
+    - script: |
+        echo "Build.SourcesDirectory = $(Build.SourcesDirectory)"
+        echo ""
+        echo "Contents of source directory:"
+        ls -la $(Build.SourcesDirectory)
+        echo ""
+        echo "HTML files:"
+        find $(Build.SourcesDirectory) -name "*.html" -not -path "*/.git/*"
+      displayName: '🔍 Debug — Print Paths'
+
+    # ---- DEBUG: Verify token is available (prints length only, not the value) ----
+    - script: |
+        if [ -z "$(DEPLOYMENT_TOKEN)" ]; then
+          echo "❌ DEPLOYMENT_TOKEN is EMPTY — check your variable group"
+          echo ""
+          echo "Fix: Go to Pipelines → Library → Kloudvin-deploy"
+          echo "  1. Delete the DEPLOYMENT_TOKEN variable"
+          echo "  2. Re-add it: copy a FRESH token from Azure Portal"
+          echo "     (Static Web App → Overview → Manage deployment token)"
+          echo "  3. Click the 🔒 lock icon to mark as secret"
+          echo "  4. Save"
+          exit 1
+        else
+          TOKEN_LEN=$(echo -n "$(DEPLOYMENT_TOKEN)" | wc -c)
+          echo "✅ DEPLOYMENT_TOKEN is set (length: $TOKEN_LEN characters)"
+          
+          if [ "$TOKEN_LEN" -lt 100 ]; then
+            echo "⚠️  Token seems too short — Azure SWA tokens are typically 500+ characters"
+            echo "   Did you copy the full token from Azure Portal?"
+          fi
+        fi
+      displayName: '🔑 Verify Deployment Token'
+
+    # ---- DEPLOY TO AZURE STATIC WEB APPS ----
+    - task: AzureStaticWebApp@0
+      displayName: '🌐 Deploy to Azure Static Web Apps'
+      inputs:
+        azure_static_web_apps_api_token: $(DEPLOYMENT_TOKEN)
+        app_location: '/'
+        output_location: ''
+        skip_app_build: true
+        skip_api_build: true
+      env:
+        AZURE_STATIC_WEB_APPS_API_TOKEN: $(DEPLOYMENT_TOKEN)
+        DEPLOYMENT_TOKEN: $(DEPLOYMENT_TOKEN)
+
+# ================================================================
+# STAGE 2: POST-DEPLOY VERIFICATION
+# ================================================================
+- stage: Verify
+  displayName: '🔍 Verify Deployment'
+  dependsOn: BuildAndDeploy
+  condition: succeeded()
+  jobs:
+  - job: VerifyJob
+    displayName: 'Health Check'
+    steps:
+
+    - script: |
+        echo "========================================="
+        echo "  KloudVin — Deployment Verification"
+        echo "========================================="
+        echo ""
+        
+        SITE="$(SITE_URL)"
+        
+        if [ -z "$SITE" ]; then
+          echo "⚠️  SITE_URL variable not set — skipping health check"
+          echo "   Add SITE_URL to your Kloudvin-deploy variable group"
+          exit 0
+        fi
+        
+        echo "🌐 Site URL: $SITE"
+        echo "⏳ Waiting 15 seconds for propagation..."
+        sleep 15
+        
+        HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$SITE" --max-time 30 2>/dev/null || echo "000")
+        
+        if [ "$HTTP_STATUS" = "200" ]; then
+          echo "✅ Site is LIVE — HTTP $HTTP_STATUS"
+        elif [ "$HTTP_STATUS" = "000" ]; then
+          echo "⚠️  Could not reach site (timeout or DNS not ready yet)"
+        else
+          echo "⚠️  Site returned HTTP $HTTP_STATUS — may still be provisioning"
+        fi
+        
+        echo ""
+        echo "========================================="
+        echo "  ✅ Pipeline complete!"
+        echo "  🌐 Visit: $SITE"
+        echo "========================================="
+      displayName: '🔍 Health Check'
+      continueOnError: true
