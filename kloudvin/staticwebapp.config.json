@@ -37,6 +37,7 @@
   },
   "mimeTypes": {
     ".json": "application/json",
-    ".md": "text/markdown"
+    ".md": "text/markdown",
+    ".svg": "image/svg+xml"
   }
 }
