@@ -5,7 +5,8 @@
       "/css/*",
       "/js/*",
       "/images/*",
-      "*.html"
+      "*.html",
+      "/.data-api/*"
     ]
   },
   "routes": [
@@ -20,6 +21,10 @@
     {
       "route": "/article",
       "rewrite": "/pages/article.html"
+    },
+    {
+      "route": "/.data-api/*",
+      "allowedRoles": ["anonymous", "authenticated"]
     }
   ],
   "responseOverrides": {
@@ -37,7 +42,7 @@
   },
   "mimeTypes": {
     ".json": "application/json",
-    ".md": "text/markdown",
-    ".svg": "image/svg+xml"
-  }
+    ".md": "text/markdown"
+  },
+  "dataApiLocation": "/swa-db-connections"
 }

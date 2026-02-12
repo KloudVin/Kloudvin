@@ -90,7 +90,7 @@ stages:
         if [ -z "$(DEPLOYMENT_TOKEN)" ]; then
           echo "❌ DEPLOYMENT_TOKEN is EMPTY — check your variable group"
           echo ""
-          echo "Fix: Go to Pipelines → Library → Kloudvin-deploy"
+          echo "Fix: Go to Pipelines → Library → kloudvin-deploy"
           echo "  1. Delete the DEPLOYMENT_TOKEN variable"
           echo "  2. Re-add it: copy a FRESH token from Azure Portal"
           echo "     (Static Web App → Overview → Manage deployment token)"

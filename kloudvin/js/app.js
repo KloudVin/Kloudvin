@@ -3,9 +3,6 @@
    Admin System, Articles, Editor, Utilities
    ================================================================ */
 
-// ---- ADMIN PASSWORD (Change this!) ----
-const ADMIN_PASSWORD = 'kloudvin@2026';
-
 // ---- CATEGORY CONFIG ----
 const categoryColors = {
   Cloud:      { bg:'rgba(0,240,255,.08)', color:'#00f0ff', thumb:'linear-gradient(135deg,#0b1a30,#0f2847)' },
@@ -22,44 +19,69 @@ const categoryIcons = {
 };
 
 // ---- ARTICLES DATA ----
-let articles = JSON.parse(localStorage.getItem('kloudvin_articles')) || [
-  {
-    id: 'multi-cloud-strategy',
-    title: "Multi-Cloud Strategy: When and How to Go Beyond a Single Provider",
-    desc: "A practical guide to designing multi-cloud architectures without the complexity overhead.",
-    category: "Cloud", readTime: "8 min read",
-    tags: ["AWS","Azure","GCP","Architecture"],
-    date: "Feb 5, 2026",
-    content: "## Introduction\n\nMulti-cloud is no longer a buzzword — it's a reality for most enterprises. But when should you actually adopt it, and how do you avoid the pitfalls?\n\n## Why Multi-Cloud?\n\nThere are several legitimate reasons to go multi-cloud:\n\n- **Avoid vendor lock-in** — reduce dependency on a single provider\n- **Best-of-breed services** — use the best service from each cloud\n- **Compliance requirements** — data residency laws may require it\n- **Disaster recovery** — true cross-cloud DR\n\n## Architecture Patterns\n\n### Pattern 1: Workload Segregation\n\nRun different workloads on different clouds based on strengths:\n\n```\nAWS  → Data/ML workloads (SageMaker, Redshift)\nAzure → Enterprise apps (.NET, Active Directory)\nGCP   → Analytics & BigQuery workloads\n```\n\n### Pattern 2: Active-Active\n\nRun the same workload across clouds for resilience. This is complex but provides true HA.\n\n## Key Considerations\n\n> The biggest mistake teams make is treating multi-cloud as running the same thing everywhere. Instead, play to each cloud's strengths.\n\n## Conclusion\n\nMulti-cloud done right is powerful. Multi-cloud done wrong is expensive chaos. Start with a clear strategy."
-  },
-  {
-    id: 'production-kubernetes',
-    title: "Production-Ready Kubernetes: Lessons from 50+ Deployments",
-    desc: "Battle-tested patterns, anti-patterns, and things documentation doesn't tell you.",
-    category: "Kubernetes", readTime: "12 min read",
-    tags: ["K8s","Docker","Helm","Production"],
-    date: "Jan 28, 2026",
-    content: "## Introduction\n\nAfter deploying Kubernetes in production across 50+ projects, I've compiled the lessons that documentation doesn't teach you.\n\n## Lesson 1: Resource Limits Are Non-Negotiable\n\nAlways set resource requests AND limits:\n\n```yaml\nresources:\n  requests:\n    memory: \"256Mi\"\n    cpu: \"250m\"\n  limits:\n    memory: \"512Mi\"\n    cpu: \"500m\"\n```\n\n## Lesson 2: Namespaces Are Your Friend\n\nUse namespaces for environment separation:\n\n- `production`\n- `staging`\n- `monitoring`\n- `ingress`\n\n## Lesson 3: Don't Skip Health Checks\n\nLiveness and readiness probes save you from silent failures.\n\n> 90% of production K8s incidents I've seen could have been prevented with proper health checks and resource limits.\n\n## Conclusion\n\nKubernetes is powerful but unforgiving. Respect the fundamentals."
-  },
-  {
-    id: 'terraform-vs-pulumi',
-    title: "Terraform vs Pulumi in 2026: Which IaC Tool Should You Pick?",
-    desc: "An honest comparison from someone who uses both daily in enterprise environments.",
-    category: "IaC", readTime: "10 min read",
-    tags: ["Terraform","Pulumi","IaC","DevOps"],
-    date: "Jan 15, 2026",
-    content: "## Introduction\n\nThe IaC landscape has evolved significantly. Let me share my experience using both Terraform and Pulumi in production.\n\n## Terraform: The Industry Standard\n\n**Pros:**\n- Massive community & ecosystem\n- HCL is easy to learn\n- Huge provider catalog\n- Battle-tested at scale\n\n**Cons:**\n- HCL limitations for complex logic\n- State management complexity\n- No real programming constructs\n\n```hcl\nresource \"aws_instance\" \"web\" {\n  ami           = \"ami-0c55b159cbfafe1f0\"\n  instance_type = \"t3.micro\"\n}\n```\n\n## Pulumi: The Developer-Friendly Choice\n\n**Pros:**\n- Real programming languages (Python, TypeScript, Go)\n- Better testing capabilities\n- Rich abstractions\n\n**Cons:**\n- Smaller community\n- Learning curve for ops teams\n- Fewer providers\n\n## My Recommendation\n\n> Use Terraform for platform teams and shared infrastructure. Use Pulumi when your team is developer-heavy and needs complex logic.\n\n## Conclusion\n\nBoth tools are excellent. The right choice depends on your team's DNA."
-  }
-];
+let articles = [];
 
-function saveArticles() {
-  localStorage.setItem('kloudvin_articles', JSON.stringify(articles));
+// Load articles from database on page load
+async function loadArticles() {
+  articles = await getArticles();
+  return articles;
+}
+
+// Initialize default articles if database is empty
+async function initializeDefaultArticles() {
+  const defaultArticles = [
+    {
+      id: 'multi-cloud-strategy',
+      title: "Multi-Cloud Strategy: When and How to Go Beyond a Single Provider",
+      description: "A practical guide to designing multi-cloud architectures without the complexity overhead.",
+      category: "Cloud", 
+      read_time: "8 min read",
+      tags: ["AWS","Azure","GCP","Architecture"],
+      date_published: "Feb 5, 2026",
+      content: "## Introduction\n\nMulti-cloud is no longer a buzzword — it's a reality for most enterprises. But when should you actually adopt it, and how do you avoid the pitfalls?\n\n## Why Multi-Cloud?\n\nThere are several legitimate reasons to go multi-cloud:\n\n- **Avoid vendor lock-in** — reduce dependency on a single provider\n- **Best-of-breed services** — use the best service from each cloud\n- **Compliance requirements** — data residency laws may require it\n- **Disaster recovery** — true cross-cloud DR\n\n## Architecture Patterns\n\n### Pattern 1: Workload Segregation\n\nRun different workloads on different clouds based on strengths:\n\n```\nAWS  → Data/ML workloads (SageMaker, Redshift)\nAzure → Enterprise apps (.NET, Active Directory)\nGCP   → Analytics & BigQuery workloads\n```\n\n### Pattern 2: Active-Active\n\nRun the same workload across clouds for resilience. This is complex but provides true HA.\n\n## Key Considerations\n\n> The biggest mistake teams make is treating multi-cloud as running the same thing everywhere. Instead, play to each cloud's strengths.\n\n## Conclusion\n\nMulti-cloud done right is powerful. Multi-cloud done wrong is expensive chaos. Start with a clear strategy."
+    },
+    {
+      id: 'production-kubernetes',
+      title: "Production-Ready Kubernetes: Lessons from 50+ Deployments",
+      description: "Battle-tested patterns, anti-patterns, and things documentation doesn't tell you.",
+      category: "Kubernetes", 
+      read_time: "12 min read",
+      tags: ["K8s","Docker","Helm","Production"],
+      date_published: "Jan 28, 2026",
+      content: "## Introduction\n\nAfter deploying Kubernetes in production across 50+ projects, I've compiled the lessons that documentation doesn't teach you.\n\n## Lesson 1: Resource Limits Are Non-Negotiable\n\nAlways set resource requests AND limits:\n\n```yaml\nresources:\n  requests:\n    memory: \"256Mi\"\n    cpu: \"250m\"\n  limits:\n    memory: \"512Mi\"\n    cpu: \"500m\"\n```\n\n## Lesson 2: Namespaces Are Your Friend\n\nUse namespaces for environment separation:\n\n- `production`\n- `staging`\n- `monitoring`\n- `ingress`\n\n## Lesson 3: Don't Skip Health Checks\n\nLiveness and readiness probes save you from silent failures.\n\n> 90% of production K8s incidents I've seen could have been prevented with proper health checks and resource limits.\n\n## Conclusion\n\nKubernetes is powerful but unforgiving. Respect the fundamentals."
+    },
+    {
+      id: 'terraform-vs-pulumi',
+      title: "Terraform vs Pulumi in 2026: Which IaC Tool Should You Pick?",
+      description: "An honest comparison from someone who uses both daily in enterprise environments.",
+      category: "IaC", 
+      read_time: "10 min read",
+      tags: ["Terraform","Pulumi","IaC","DevOps"],
+      date_published: "Jan 15, 2026",
+      content: "## Introduction\n\nThe IaC landscape has evolved significantly. Let me share my experience using both Terraform and Pulumi in production.\n\n## Terraform: The Industry Standard\n\n**Pros:**\n- Massive community & ecosystem\n- HCL is easy to learn\n- Huge provider catalog\n- Battle-tested at scale\n\n**Cons:**\n- HCL limitations for complex logic\n- State management complexity\n- No real programming constructs\n\n```hcl\nresource \"aws_instance\" \"web\" {\n  ami           = \"ami-0c55b159cbfafe1f0\"\n  instance_type = \"t3.micro\"\n}\n```\n\n## Pulumi: The Developer-Friendly Choice\n\n**Pros:**\n- Real programming languages (Python, TypeScript, Go)\n- Better testing capabilities\n- Rich abstractions\n\n**Cons:**\n- Smaller community\n- Learning curve for ops teams\n- Fewer providers\n\n## My Recommendation\n\n> Use Terraform for platform teams and shared infrastructure. Use Pulumi when your team is developer-heavy and needs complex logic.\n\n## Conclusion\n\nBoth tools are excellent. The right choice depends on your team's DNA."
+    }
+  ];
+
+  for (const article of defaultArticles) {
+    try {
+      await createArticle(article);
+    } catch (error) {
+      console.error('Error creating default article:', error);
+    }
+  }
 }
 
 // ---- RENDER POST CARDS ----
-function renderPosts(containerId, limit) {
+async function renderPosts(containerId, limit) {
   const grid = document.getElementById(containerId);
   if (!grid) return;
+  
+  // Show loading state
+  grid.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--neon-cyan)"><i class="fas fa-spinner fa-spin"></i> Loading articles...</div>';
+  
+  // Load articles from database
+  await loadArticles();
+  
   grid.innerHTML = '';
   const list = limit ? articles.slice(0, limit) : articles;
   list.forEach((a, i) => {
@@ -75,12 +97,12 @@ function renderPosts(containerId, limit) {
       <div class="pcard-body">
         <div class="pcard-meta">
           <span class="pcard-cat" style="background:${cc.bg};color:${cc.color}">${a.category}</span>
-          <span class="pcard-date">${a.date}</span>
+          <span class="pcard-date">${a.date_published || a.date}</span>
         </div>
         <h3>${a.title}</h3>
-        <p>${a.desc}</p>
+        <p>${a.description || a.desc}</p>
         <div class="pcard-foot">
-          <span class="pcard-time"><i class="far fa-clock"></i> ${a.readTime}</span>
+          <span class="pcard-time"><i class="far fa-clock"></i> ${a.read_time || a.readTime}</span>
           <span class="pcard-read">Read <i class="fas fa-arrow-right"></i></span>
         </div>
       </div>`;
@@ -90,9 +112,16 @@ function renderPosts(containerId, limit) {
 }
 
 // For sub-pages (relative path adjustment)
-function renderPostsSub(containerId, limit) {
+async function renderPostsSub(containerId, limit) {
   const grid = document.getElementById(containerId);
   if (!grid) return;
+  
+  // Show loading state
+  grid.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--neon-cyan)"><i class="fas fa-spinner fa-spin"></i> Loading articles...</div>';
+  
+  // Load articles from database
+  await loadArticles();
+  
   grid.innerHTML = '';
   const list = limit ? articles.slice(0, limit) : articles;
   list.forEach((a, i) => {
@@ -108,12 +137,12 @@ function renderPostsSub(containerId, limit) {
       <div class="pcard-body">
         <div class="pcard-meta">
           <span class="pcard-cat" style="background:${cc.bg};color:${cc.color}">${a.category}</span>
-          <span class="pcard-date">${a.date}</span>
+          <span class="pcard-date">${a.date_published || a.date}</span>
         </div>
         <h3>${a.title}</h3>
-        <p>${a.desc}</p>
+        <p>${a.description || a.desc}</p>
         <div class="pcard-foot">
-          <span class="pcard-time"><i class="far fa-clock"></i> ${a.readTime}</span>
+          <span class="pcard-time"><i class="far fa-clock"></i> ${a.read_time || a.readTime}</span>
           <span class="pcard-read">Read <i class="fas fa-arrow-right"></i></span>
         </div>
       </div>`;
@@ -124,14 +153,34 @@ function renderPostsSub(containerId, limit) {
 
 // ---- ADMIN SYSTEM ----
 let isAdmin = false;
+let currentUser = null;
+
+// Check session on page load
+function checkUserSession() {
+  currentUser = getUserSession();
+  if (currentUser && currentUser.is_admin) {
+    isAdmin = true;
+    document.body.classList.add('admin-mode');
+    const badge = document.getElementById('adminBadge');
+    if (badge) badge.classList.add('show');
+    const lock = document.getElementById('adminLock');
+    if (lock) { 
+      lock.classList.add('unlocked'); 
+      lock.innerHTML = '<i class="fas fa-lock-open"></i>'; 
+      lock.title = 'Logout Admin'; 
+    }
+  }
+}
 
 function openAdminLogin() {
   if (isAdmin) { logoutAdmin(); return; }
   const overlay = document.getElementById('adminModalOverlay');
   if (overlay) {
     overlay.classList.add('open');
+    const usernameInput = document.getElementById('adminUsername');
     const pwd = document.getElementById('adminPassword');
-    if (pwd) { pwd.value = ''; setTimeout(() => pwd.focus(), 300); }
+    if (usernameInput) { usernameInput.value = ''; }
+    if (pwd) { pwd.value = ''; setTimeout(() => usernameInput ? usernameInput.focus() : pwd.focus(), 300); }
     const err = document.getElementById('adminError');
     if (err) err.classList.remove('show');
   }
@@ -142,31 +191,80 @@ function closeAdminLogin() {
   if (overlay) overlay.classList.remove('open');
 }
 
-function verifyAdmin() {
+async function verifyAdmin() {
+  const usernameInput = document.getElementById('adminUsername');
   const pwd = document.getElementById('adminPassword');
-  if (pwd && pwd.value === ADMIN_PASSWORD) {
-    isAdmin = true;
-    document.body.classList.add('admin-mode');
-    const badge = document.getElementById('adminBadge');
-    if (badge) badge.classList.add('show');
-    const lock = document.getElementById('adminLock');
-    if (lock) { lock.classList.add('unlocked'); lock.innerHTML = '<i class="fas fa-lock-open"></i>'; lock.title = 'Logout Admin'; }
-    closeAdminLogin();
-    showToast('Welcome back, Vinod! Editor unlocked 🔓');
-  } else {
+  const username = usernameInput ? usernameInput.value.trim() : 'admin';
+  const password = pwd ? pwd.value : '';
+  
+  if (!password) {
     const err = document.getElementById('adminError');
-    if (err) err.classList.add('show');
-    if (pwd) { pwd.value = ''; pwd.focus(); }
+    if (err) { err.textContent = 'Please enter a password'; err.classList.add('show'); }
+    return;
+  }
+  
+  try {
+    // Fetch user from database
+    const user = await getUserByUsername(username);
+    
+    if (user && user.password_hash === password) {
+      // Successful login
+      isAdmin = user.is_admin;
+      currentUser = user;
+      
+      // Update last login
+      await updateLastLogin(user.id);
+      
+      // Store session
+      setUserSession(user);
+      
+      if (isAdmin) {
+        document.body.classList.add('admin-mode');
+        const badge = document.getElementById('adminBadge');
+        if (badge) badge.classList.add('show');
+        const lock = document.getElementById('adminLock');
+        if (lock) { 
+          lock.classList.add('unlocked'); 
+          lock.innerHTML = '<i class="fas fa-lock-open"></i>'; 
+          lock.title = 'Logout Admin'; 
+        }
+        closeAdminLogin();
+        showToast('Welcome back, ' + user.username + '! Editor unlocked 🔓');
+      } else {
+        showToast('Login successful, but you need admin privileges', true);
+      }
+    } else {
+      const err = document.getElementById('adminError');
+      if (err) { 
+        err.textContent = 'Invalid username or password'; 
+        err.classList.add('show'); 
+      }
+      if (pwd) { pwd.value = ''; pwd.focus(); }
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    const err = document.getElementById('adminError');
+    if (err) { 
+      err.textContent = 'Login failed. Please try again.'; 
+      err.classList.add('show'); 
+    }
   }
 }
 
 function logoutAdmin() {
   isAdmin = false;
+  currentUser = null;
+  clearUserSession();
+  
   document.body.classList.remove('admin-mode');
   const badge = document.getElementById('adminBadge');
   if (badge) badge.classList.remove('show');
   const lock = document.getElementById('adminLock');
-  if (lock) { lock.classList.remove('unlocked'); lock.innerHTML = '<i class="fas fa-lock"></i>'; lock.title = 'Admin'; }
+  if (lock) { 
+    lock.classList.remove('unlocked'); 
+    lock.innerHTML = '<i class="fas fa-lock"></i>'; 
+    lock.title = 'Admin'; 
+  }
   showToast('Logged out of admin mode');
 }
 
@@ -535,7 +633,7 @@ function insertMd(before, after) {
   ta.setSelectionRange(start + before.length, start + before.length + (selected || 'text').length);
 }
 
-function publishArticle() {
+async function publishArticle() {
   const title = document.getElementById('artTitle').value.trim();
   const category = document.getElementById('artCategory').value;
   const readTime = document.getElementById('artReadTime').value;
@@ -559,25 +657,45 @@ function publishArticle() {
   const dateStr = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
   const id = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/,'');
 
-  articles.unshift({ id, title, desc, category, readTime, tags:[...currentTags], date:dateStr, content });
-  saveArticles();
+  const article = { 
+    id, 
+    title, 
+    description: desc, 
+    category, 
+    read_time: readTime, 
+    tags: [...currentTags], 
+    date_published: dateStr, 
+    content,
+    author_id: currentUser ? currentUser.id : null
+  };
 
-  // Reset form
-  document.getElementById('artTitle').value = '';
-  document.getElementById('artDesc').value = '';
-  document.getElementById('artContent').value = '';
-  currentTags = [];
-  renderTags();
-  removeUploadedFile();
-  switchEditorMode('write');
-  closeEditor();
-  showToast('Article published to "' + category + '" topic! 🎉');
+  try {
+    // Save to database
+    await createArticle(article);
+    
+    // Add to local array for immediate display
+    articles.unshift(article);
 
-  // Re-render
-  const postsGrid = document.getElementById('postsGrid');
-  if (postsGrid) {
-    if (window.location.pathname.includes('pages/')) renderPostsSub('postsGrid');
-    else renderPosts('postsGrid');
+    // Reset form
+    document.getElementById('artTitle').value = '';
+    document.getElementById('artDesc').value = '';
+    document.getElementById('artContent').value = '';
+    currentTags = [];
+    renderTags();
+    removeUploadedFile();
+    switchEditorMode('write');
+    closeEditor();
+    showToast('Article published to "' + category + '" topic! 🎉');
+
+    // Re-render
+    const postsGrid = document.getElementById('postsGrid');
+    if (postsGrid) {
+      if (window.location.pathname.includes('pages/')) await renderPostsSub('postsGrid');
+      else await renderPosts('postsGrid');
+    }
+  } catch (error) {
+    console.error('Error publishing article:', error);
+    showToast('Failed to publish article. Please try again.', true);
   }
 }
 
@@ -686,6 +804,7 @@ function initApp() {
   initHamburger();
   initTagInput();
   initAdminModal();
+  checkUserSession(); // Check if user is already logged in
 }
 
 document.addEventListener('DOMContentLoaded', initApp);

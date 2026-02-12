@@ -1,0 +1,27 @@
+{
+  "name": "kloudvin",
+  "version": "2.0.0",
+  "description": "Cloud & DevOps Blog Platform with Azure SQL Database",
+  "scripts": {
+    "start": "swa start . --data-api-location swa-db-connections",
+    "start:no-db": "swa start .",
+    "deploy": "swa deploy --env production",
+    "build": "echo 'No build step required for static site'",
+    "test": "echo 'No tests configured yet'"
+  },
+  "keywords": [
+    "azure",
+    "static-web-apps",
+    "blog",
+    "cloud",
+    "devops"
+  ],
+  "author": "Vinod H",
+  "license": "MIT",
+  "devDependencies": {
+    "@azure/static-web-apps-cli": "^1.1.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

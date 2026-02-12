@@ -76,10 +76,10 @@ function loadComponents(isSubPage) {
         <a href="#">RSS</a>
       </div>
       <div class="footer-social">
-        <a href="https://www.linkedin.com/in/vinsvin/" target="_blank"><i class="fab fa-linkedin-in"></i></a>
-        <a href="https://github.com/KloudVin" target="_blank"><i class="fab fa-github"></i></a>
-        <a href="https://x.com/vinswin" target="_blank"><i class="fab fa-x-twitter"></i></a>
-        <a href="mailto:h.vinod@gmail.com"><i class="fas fa-envelope"></i></a>
+        <a href="#"><i class="fab fa-linkedin-in"></i></a>
+        <a href="#"><i class="fab fa-github"></i></a>
+        <a href="#"><i class="fab fa-x-twitter"></i></a>
+        <a href="#"><i class="fas fa-rss"></i></a>
         <button class="admin-lock" id="adminLock" onclick="openAdminLogin()" title="Admin"><i class="fas fa-lock"></i></button>
       </div>
     </div>
@@ -94,8 +94,9 @@ function loadComponents(isSubPage) {
       <button class="admin-modal-close" onclick="closeAdminLogin()"><i class="fas fa-xmark"></i></button>
       <div class="admin-modal-icon"><i class="fas fa-user-shield"></i></div>
       <h3>Admin Access</h3>
-      <p>Enter your password to unlock the editor</p>
-      <div class="error-msg" id="adminError">Incorrect password. Try again.</div>
+      <p>Enter your credentials to unlock the editor</p>
+      <div class="error-msg" id="adminError">Invalid username or password</div>
+      <input class="form-input" id="adminUsername" type="text" placeholder="Username" style="margin-bottom:0.5rem">
       <input class="form-input" id="adminPassword" type="password" placeholder="••••••••">
       <button class="btn-glow primary" style="width:100%;justify-content:center;margin-top:.5rem" onclick="verifyAdmin()">
         <i class="fas fa-unlock"></i> Unlock
