@@ -59,9 +59,14 @@ function filterPosts(category) {
 renderPostsSub('postsGrid').then(function() {
   // After articles are loaded, apply filter if category is selected
   if (selectedCategory && selectedCategory !== 'all') {
+    // Filter posts directly instead of clicking button
+    filterPosts(selectedCategory);
+    // Update active button
+    var buttons = document.querySelectorAll('.filter-btn');
+    buttons.forEach(function(b) { b.classList.remove('active'); });
     var btn = document.querySelector('.filter-btn[data-cat="' + selectedCategory + '"]');
     if (btn) {
-      btn.click();
+      btn.classList.add('active');
     }
   }
 });

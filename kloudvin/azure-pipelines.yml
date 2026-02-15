@@ -115,12 +115,13 @@ stages:
       inputs:
         azure_static_web_apps_api_token: $(DEPLOYMENT_TOKEN)
         app_location: '/'
+        api_location: ''
         output_location: ''
         skip_app_build: true
         skip_api_build: true
       env:
         AZURE_STATIC_WEB_APPS_API_TOKEN: $(DEPLOYMENT_TOKEN)
-        DEPLOYMENT_TOKEN: $(DEPLOYMENT_TOKEN)
+        
 
 # ================================================================
 # STAGE 2: POST-DEPLOY VERIFICATION

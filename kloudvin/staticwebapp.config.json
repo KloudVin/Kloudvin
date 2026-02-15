@@ -46,8 +46,5 @@
   },
   "platform": {
     "apiRuntime": "node:18"
-  },
-  "dataApi": {
-    "enabled": true
   }
 }

@@ -3,10 +3,9 @@
    Handles all interactions with Azure SQL via SWA Data API
    ================================================================ */
 
-// Use SWA CLI proxy to avoid CORS issues
-// In production, this will be /data-api/rest
-// In development with SWA CLI, this proxies to localhost:5000
-const DB_API_BASE = '/data-api/rest';
+// Use Azure Functions API
+// Routes: /api/articles, /api/users
+const DB_API_BASE = 'https://kloudvin-functions-geftgkb3dehxhag7.centralus-01.azurewebsites.net/api';
 
 // ---- USER MANAGEMENT ----
 
@@ -15,7 +14,7 @@ const DB_API_BASE = '/data-api/rest';
  */
 async function getUsers() {
   try {
-    const response = await fetch(`${DB_API_BASE}/User`, {
+    const response = await fetch(`${DB_API_BASE}/users`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' }
     });
@@ -38,7 +37,7 @@ async function getUsers() {
 async function getUserByUsername(username) {
   try {
     // Fetch all users and filter client-side (simpler for now)
-    const url = `${DB_API_BASE}/User`;
+    const url = `${DB_API_BASE}/users`;
     console.log('Fetching users from:', url);
     
     const response = await fetch(url, {
@@ -73,7 +72,7 @@ async function getUserByUsername(username) {
  */
 async function createUser(username, email, password) {
   try {
-    const response = await fetch(`${DB_API_BASE}/User`, {
+    const response = await fetch(`${DB_API_BASE}/users`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -103,11 +102,10 @@ async function createUser(username, email, password) {
  */
 async function updateLastLogin(userId) {
   try {
-    const response = await fetch(`${DB_API_BASE}/User/id/${userId}`, {
+    const response = await fetch(`${DB_API_BASE}/users/${userId}`, {
       method: 'PATCH',
       headers: { 
-        'Content-Type': 'application/json',
-        'X-MS-API-ROLE': 'anonymous'
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         last_login: new Date().toISOString()
@@ -134,7 +132,7 @@ async function updateLastLogin(userId) {
  */
 async function getArticles() {
   try {
-    const response = await fetch(`${DB_API_BASE}/Article?$orderby=created_at desc`, {
+    const response = await fetch(`${DB_API_BASE}/articles?$orderby=created_at desc`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' }
     });
@@ -163,7 +161,7 @@ async function getArticles() {
  */
 async function getArticleById(id) {
   try {
-    const response = await fetch(`${DB_API_BASE}/Article/id/${id}`, {
+    const response = await fetch(`${DB_API_BASE}/articles/${id}`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' }
     });
@@ -172,8 +170,7 @@ async function getArticleById(id) {
       throw new Error(`Failed to fetch article: ${response.statusText}`);
     }
     
-    const data = await response.json();
-    const article = data.value || data;
+    const article = await response.json();
     
     // Parse tags
     if (article.tags) {
@@ -198,7 +195,7 @@ async function createArticle(article) {
       tags: Array.isArray(article.tags) ? article.tags.join(',') : article.tags
     };
     
-    const response = await fetch(`${DB_API_BASE}/Article`, {
+    const response = await fetch(`${DB_API_BASE}/articles`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(articleData)
@@ -210,7 +207,7 @@ async function createArticle(article) {
     }
     
     const data = await response.json();
-    return data.value || data;
+    return data;
   } catch (error) {
     console.error('Error creating article:', error);
     throw error;
@@ -227,7 +224,7 @@ async function updateArticle(id, updates) {
       updates.tags = updates.tags.join(',');
     }
     
-    const response = await fetch(`${DB_API_BASE}/Article/id/${id}`, {
+    const response = await fetch(`${DB_API_BASE}/articles/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
@@ -250,7 +247,7 @@ async function updateArticle(id, updates) {
  */
 async function deleteArticle(id) {
   try {
-    const response = await fetch(`${DB_API_BASE}/Article/id/${id}`, {
+    const response = await fetch(`${DB_API_BASE}/articles/${id}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' }
     });
@@ -300,7 +297,7 @@ function isUserLoggedIn() {
  */
 async function getAllUsers() {
   try {
-    const response = await fetch(`${DB_API_BASE}/User`, {
+    const response = await fetch(`${DB_API_BASE}/users`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' }
     });
@@ -322,7 +319,7 @@ async function getAllUsers() {
  */
 async function createNewUser(username, email, password, role, isAdmin, phone) {
   try {
-    const response = await fetch(`${DB_API_BASE}/User`, {
+    const response = await fetch(`${DB_API_BASE}/users`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -341,7 +338,7 @@ async function createNewUser(username, email, password, role, isAdmin, phone) {
     }
     
     const data = await response.json();
-    return { success: true, user: data.value || data };
+    return { success: true, user: data };
   } catch (error) {
     console.error('Error creating user:', error);
     return { success: false, message: error.message };
@@ -353,7 +350,7 @@ async function createNewUser(username, email, password, role, isAdmin, phone) {
  */
 async function deleteUser(userId) {
   try {
-    const response = await fetch(`${DB_API_BASE}/User/id/${userId}`, {
+    const response = await fetch(`${DB_API_BASE}/users/${userId}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' }
     });
@@ -373,9 +370,10 @@ async function updateExistingUser(userId, username, email, password, role, phone
     const updateData = {
       role,
       phone,
-      email  // Add email to update
+      email,  // Add email to update
+      is_admin: role === 'Administrator'  // Set is_admin based on role
     };
-    
+
     // Only include password if provided
     if (password) {
       updateData.password_hash = password;
@@ -383,7 +381,7 @@ async function updateExistingUser(userId, username, email, password, role, phone
     
     console.log('Updating user with data:', updateData);
     
-    const response = await fetch(`${DB_API_BASE}/User/id/${userId}`, {
+    const response = await fetch(`${DB_API_BASE}/users/${userId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updateData)
@@ -442,31 +440,20 @@ async function resetUserPassword(userId, newPassword) {
   try {
     console.log('resetUserPassword called:', { userId, newPassword: '***' });
     
-    // Direct SQL update via stored procedure or raw query
-    // Since REST API has permission issues, we'll use a workaround
-    // Update password directly in the database
-    
-    const response = await fetch(`${DB_API_BASE}/User?$filter=id eq ${userId}`, {
-      method: 'GET'
+    const response = await fetch(`${DB_API_BASE}/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        password_hash: newPassword
+      })
     });
     
     if (!response.ok) {
-      console.error('Failed to verify user');
+      console.error('Failed to reset password');
       return false;
     }
     
-    const userData = await response.json();
-    if (!userData.value || userData.value.length === 0) {
-      console.error('User not found');
-      return false;
-    }
-    
-    // For now, store the password in localStorage as a workaround
-    // This will be used during login verification
-    const tempPasswordKey = `temp_password_${userId}`;
-    localStorage.setItem(tempPasswordKey, newPassword);
-    
-    console.log('Password reset successful (temporary storage)');
+    console.log('Password reset successful');
     return true;
     
   } catch (error) {

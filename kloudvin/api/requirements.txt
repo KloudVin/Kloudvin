@@ -1,0 +1,4 @@
+# Node.js functions don't use this, but Python functions do
+azure-functions
+markitdown[docx]
+azure-storage-blob

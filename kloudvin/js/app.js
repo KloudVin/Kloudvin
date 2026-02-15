@@ -2086,6 +2086,9 @@ function openAddCategoryModal() {
   const description = prompt('Category Description:');
   if (!description || !description.trim()) return;
   
+  const tagsInput = prompt('Subcategories/Tags (comma-separated, e.g., Terraform, Pulumi, Ansible):');
+  const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()).filter(t => t) : [];
+  
   const categories = getCategories();
   const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
   
@@ -2105,7 +2108,7 @@ function openAddCategoryModal() {
     icon: icon.trim(), 
     description: description.trim(),
     color: color,
-    tags: []
+    tags: tags
   });
   saveCategories(categories);
   refreshCategoriesList();
@@ -2129,9 +2132,14 @@ function editCategory(categoryId) {
   const description = prompt('Category Description:', category.description);
   if (!description || !description.trim()) return;
   
+  const currentTags = category.tags ? category.tags.join(', ') : '';
+  const tagsInput = prompt('Subcategories/Tags (comma-separated, e.g., Terraform, Pulumi, Ansible):', currentTags);
+  const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()).filter(t => t) : [];
+  
   category.name = name.trim();
   category.icon = icon.trim();
   category.description = description.trim();
+  category.tags = tags;
   
   saveCategories(categories);
   refreshCategoriesList();

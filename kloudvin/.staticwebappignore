@@ -1,0 +1,9 @@
+api/
+node_modules/
+.git/
+*.zip
+package.json
+package-lock.json
+.vscode/
+.gitignore
+*.md

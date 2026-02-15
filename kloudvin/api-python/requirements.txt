@@ -1,0 +1,4 @@
+azure-functions
+markitdown[docx]
+azure-storage-blob
+python-docx
