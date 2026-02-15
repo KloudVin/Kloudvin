@@ -6,12 +6,13 @@
       "/js/*",
       "/images/*",
       "*.html",
-      "/.data-api/*"
+      "/data-api/*"
     ]
   },
   "routes": [
     {
-      "route": "/.data-api/*"
+      "route": "/data-api/*",
+      "allowedRoles": ["anonymous"]
     },
     {
       "route": "/blog",
@@ -42,5 +43,11 @@
   "mimeTypes": {
     ".json": "application/json",
     ".md": "text/markdown"
+  },
+  "platform": {
+    "apiRuntime": "node:18"
+  },
+  "dataApi": {
+    "enabled": true
   }
 }

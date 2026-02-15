@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Azure Deployment Diagnostic Tool</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      padding: 2rem;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 0.5rem;
+    }
+    .subtitle {
+      color: #666;
+      margin-bottom: 2rem;
+    }
+    button {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 1rem 2rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      font-weight: 600;
+      margin-bottom: 2rem;
+      width: 100%;
+    }
+    button:hover {
+      background: #5568d3;
+    }
+    .test-result {
+      margin-bottom: 1.5rem;
+      padding: 1rem;
+      border-radius: 8px;
+      border-left: 4px solid #ccc;
+    }
+    .test-result.success {
+      background: #d4edda;
+      border-color: #28a745;
+      color: #155724;
+    }
+    .test-result.error {
+      background: #f8d7da;
+      border-color: #dc3545;
+      color: #721c24;
+    }
+    .test-result.warning {
+      background: #fff3cd;
+      border-color: #ffc107;
+      color: #856404;
+    }
+    .test-result.info {
+      background: #d1ecf1;
+      border-color: #17a2b8;
+      color: #0c5460;
+    }
+    .test-title {
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+      font-size: 1.1rem;
+    }
+    .test-details {
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+      margin-top: 0.5rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .loading {
+      text-align: center;
+      padding: 2rem;
+      color: #667eea;
+    }
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .checklist {
+      background: #f8f9fa;
+      padding: 1.5rem;
+      border-radius: 8px;
+      margin-top: 2rem;
+    }
+    .checklist h3 {
+      color: #333;
+      margin-bottom: 1rem;
+    }
+    .checklist-item {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #dee2e6;
+    }
+    .checklist-item:last-child {
+      border-bottom: none;
+    }
+    pre {
+      background: #2d2d2d;
+      color: #f8f8f2;
+      padding: 1rem;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 Azure Deployment Diagnostic Tool</h1>
+    <p class="subtitle">Comprehensive test to identify database connection issues</p>
+
+    <button onclick="runAllTests()">▶️ Run All Diagnostic Tests</button>
+
+    <div id="results"></div>
+
+    <div class="checklist">
+      <h3>📋 Manual Checklist (Verify in Azure Portal)</h3>
+      <div class="checklist-item">
+        ☐ Static Web App → Configuration → <code>DATABASE_CONNECTION_STRING</code> exists
+      </div>
+      <div class="checklist-item">
+        ☐ SQL Server → Networking → "Allow Azure services..." is checked
+      </div>
+      <div class="checklist-item">
+        ☐ SQL Database → Status shows "Online"
+      </div>
+      <div class="checklist-item">
+        ☐ Static Web App → Environments → Latest deployment succeeded
+      </div>
+      <div class="checklist-item">
+        ☐ Files deployed: <code>swa-db-connections/staticwebapp.database.config.json</code>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const results = document.getElementById('results');
+
+    async function runAllTests() {
+      results.innerHTML = '<div class="loading"><div class="spinner"></div>Running diagnostic tests...</div>';
+      
+      const testResults = [];
+
+      // Test 1: Check if database config file exists
+      testResults.push(await testDatabaseConfigFile());
+
+      // Test 2: Check if static web app config exists
+      testResults.push(await testStaticWebAppConfig());
+
+      // Test 3: Test Data API endpoint
+      testResults.push(await testDataAPIEndpoint());
+
+      // Test 4: Test User endpoint
+      testResults.push(await testUserEndpoint());
+
+      // Test 5: Test Article endpoint
+      testResults.push(await testArticleEndpoint());
+
+      // Display results
+      displayResults(testResults);
+    }
+
+    async function testDatabaseConfigFile() {
+      try {
+        const response = await fetch('/swa-db-connections/staticwebapp.database.config.json');
+        if (response.ok) {
+          const config = await response.json();
+          return {
+            name: 'Database Configuration File',
+            status: 'success',
+            message: 'Database config file exists and is valid',
+            details: JSON.stringify(config, null, 2)
+          };
+        } else {
+          return {
+            name: 'Database Configuration File',
+            status: 'error',
+            message: `Config file returned status ${response.status}`,
+            details: 'The file swa-db-connections/staticwebapp.database.config.json is missing or inaccessible'
+          };
+        }
+      } catch (error) {
+        return {
+          name: 'Database Configuration File',
+          status: 'error',
+          message: 'Failed to fetch database config file',
+          details: error.message
+        };
+      }
+    }
+
+    async function testStaticWebAppConfig() {
+      try {
+        const response = await fetch('/staticwebapp.config.json');
+        if (response.ok) {
+          const config = await response.json();
+          const hasDataApi = config.dataApi && config.dataApi.enabled;
+          const hasRoute = config.routes && config.routes.some(r => r.route === '/data-api/*');
+          
+          if (hasDataApi && hasRoute) {
+            return {
+              name: 'Static Web App Configuration',
+              status: 'success',
+              message: 'Static Web App config is correct',
+              details: `Data API enabled: ${hasDataApi}\nData API route configured: ${hasRoute}`
+            };
+          } else {
+            return {
+              name: 'Static Web App Configuration',
+              status: 'warning',
+              message: 'Static Web App config may have issues',
+              details: `Data API enabled: ${hasDataApi}\nData API route configured: ${hasRoute}\n\nConfig:\n${JSON.stringify(config, null, 2)}`
+            };
+          }
+        } else {
+          return {
+            name: 'Static Web App Configuration',
+            status: 'error',
+            message: `Config file returned status ${response.status}`,
+            details: 'The file staticwebapp.config.json is missing'
+          };
+        }
+      } catch (error) {
+        return {
+          name: 'Static Web App Configuration',
+          status: 'error',
+          message: 'Failed to fetch static web app config',
+          details: error.message
+        };
+      }
+    }
+
+    async function testDataAPIEndpoint() {
+      try {
+        const response = await fetch('/data-api/rest');
+        const text = await response.text();
+        
+        if (response.status === 404) {
+          return {
+            name: 'Data API Endpoint',
+            status: 'info',
+            message: 'Data API endpoint exists (404 is expected for root)',
+            details: `Status: ${response.status}\nThis is normal - the root endpoint returns 404`
+          };
+        } else if (response.status === 500) {
+          return {
+            name: 'Data API Endpoint',
+            status: 'error',
+            message: 'Data API returns 500 Internal Server Error',
+            details: `Status: ${response.status}\nResponse: ${text}\n\nPossible causes:\n1. DATABASE_CONNECTION_STRING not set in Static Web App Configuration\n2. Database firewall blocking Azure services\n3. Database is offline\n4. Connection string is incorrect`
+          };
+        } else {
+          return {
+            name: 'Data API Endpoint',
+            status: 'success',
+            message: 'Data API endpoint is accessible',
+            details: `Status: ${response.status}\nResponse: ${text.substring(0, 200)}`
+          };
+        }
+      } catch (error) {
+        return {
+          name: 'Data API Endpoint',
+          status: 'error',
+          message: 'Cannot reach Data API endpoint',
+          details: error.message
+        };
+      }
+    }
+
+    async function testUserEndpoint() {
+      try {
+        const response = await fetch('/data-api/rest/User');
+        const text = await response.text();
+        
+        if (response.ok) {
+          const data = JSON.parse(text);
+          return {
+            name: 'User Endpoint',
+            status: 'success',
+            message: `✅ Database connection working! Found ${data.value?.length || 0} users`,
+            details: `Status: ${response.status}\nUsers: ${JSON.stringify(data, null, 2)}`
+          };
+        } else if (response.status === 500) {
+          return {
+            name: 'User Endpoint',
+            status: 'error',
+            message: '❌ Database connection failed (500 error)',
+            details: `Status: ${response.status}\nResponse: ${text}\n\n🔧 FIX:\n1. Go to Azure Portal → Static Web App → Configuration\n2. Add: DATABASE_CONNECTION_STRING\n3. Value: Server=tcp:kloudvin.database.windows.net,1433;Initial Catalog=kloudvin;Persist Security Info=False;User ID=kloudvin;Password=YOUR_PASSWORD;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;\n4. Save and wait 2 minutes`
+          };
+        } else {
+          return {
+            name: 'User Endpoint',
+            status: 'warning',
+            message: `Unexpected status: ${response.status}`,
+            details: `Status: ${response.status}\nResponse: ${text}`
+          };
+        }
+      } catch (error) {
+        return {
+          name: 'User Endpoint',
+          status: 'error',
+          message: 'Failed to test User endpoint',
+          details: error.message
+        };
+      }
+    }
+
+    async function testArticleEndpoint() {
+      try {
+        const response = await fetch('/data-api/rest/Article?$orderby=created_at desc');
+        const text = await response.text();
+        
+        if (response.ok) {
+          const data = JSON.parse(text);
+          return {
+            name: 'Article Endpoint',
+            status: 'success',
+            message: `✅ Article endpoint working! Found ${data.value?.length || 0} articles`,
+            details: `Status: ${response.status}\nArticles: ${data.value?.length || 0}`
+          };
+        } else if (response.status === 500) {
+          return {
+            name: 'Article Endpoint',
+            status: 'error',
+            message: '❌ Article endpoint failed (500 error)',
+            details: `Status: ${response.status}\nResponse: ${text}`
+          };
+        } else {
+          return {
+            name: 'Article Endpoint',
+            status: 'warning',
+            message: `Unexpected status: ${response.status}`,
+            details: `Status: ${response.status}\nResponse: ${text}`
+          };
+        }
+      } catch (error) {
+        return {
+          name: 'Article Endpoint',
+          status: 'error',
+          message: 'Failed to test Article endpoint',
+          details: error.message
+        };
+      }
+    }
+
+    function displayResults(testResults) {
+      let html = '<h2 style="margin-bottom: 1rem;">Test Results</h2>';
+      
+      const successCount = testResults.filter(r => r.status === 'success').length;
+      const errorCount = testResults.filter(r => r.status === 'error').length;
+      
+      html += `<div class="test-result info">
+        <div class="test-title">Summary</div>
+        <div>✅ Passed: ${successCount} | ❌ Failed: ${errorCount} | Total: ${testResults.length}</div>
+      </div>`;
+      
+      testResults.forEach(result => {
+        html += `
+          <div class="test-result ${result.status}">
+            <div class="test-title">${result.name}</div>
+            <div>${result.message}</div>
+            ${result.details ? `<div class="test-details">${result.details}</div>` : ''}
+          </div>
+        `;
+      });
+
+      // Add fix instructions if there are errors
+      if (errorCount > 0) {
+        html += `
+          <div class="test-result error">
+            <div class="test-title">🔧 How to Fix</div>
+            <div>
+              <strong>Most Common Issue: DATABASE_CONNECTION_STRING not set</strong>
+              <ol style="margin-top: 0.5rem; margin-left: 1.5rem;">
+                <li>Go to Azure Portal: <a href="https://portal.azure.com" target="_blank">portal.azure.com</a></li>
+                <li>Navigate to: Static Web App "Kloudvin"</li>
+                <li>Click: Settings → Configuration</li>
+                <li>Click: "+ Add"</li>
+                <li>Name: <code>DATABASE_CONNECTION_STRING</code></li>
+                <li>Value: Your SQL connection string</li>
+                <li>Click: OK → Save</li>
+                <li>Wait 2-3 minutes and test again</li>
+              </ol>
+            </div>
+          </div>
+        `;
+      }
+      
+      results.innerHTML = html;
+    }
+  </script>
+</body>
+</html>
