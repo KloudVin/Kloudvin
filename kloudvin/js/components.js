@@ -51,6 +51,8 @@ function loadComponents(isSubPage) {
     <div class="nav-right">
       <span class="admin-badge" id="adminBadge"><i class="fas fa-shield"></i> Admin</span>
       <button class="nav-cta admin-only" onclick="openEditor()"><i class="fas fa-pen-to-square"></i> New Article</button>
+      <button class="nav-cta administrator-only cms-gear-btn" id="cmsGearBtn" onclick="openCMSModal()" title="Site Settings"><i class="fas fa-gear"></i></button>
+      <button class="nav-cta administrator-only" id="usersNavBtn" onclick="openUsersPanel()" style="background:rgba(16,185,129,.15);color:var(--neon-emerald);border:1px solid rgba(16,185,129,.25);font-size:.72rem;padding:.4rem .9rem"><i class="fas fa-users-gear"></i> Users</button>
       <button class="hamburger" onclick="document.getElementById('navMenu').classList.toggle('active')">
         <span></span><span></span><span></span>
       </button>
@@ -87,20 +89,257 @@ function loadComponents(isSubPage) {
 
   document.body.insertAdjacentHTML('beforeend', footerHTML);
 
-  // Admin Modal
+  // ======== ADMIN MODAL (Multi-View: Login, Reset Password, Users) ========
   document.body.insertAdjacentHTML('beforeend', `
   <div class="admin-modal-overlay" id="adminModalOverlay">
-    <div class="admin-modal">
+    <div class="admin-modal" style="width:420px">
       <button class="admin-modal-close" onclick="closeAdminLogin()"><i class="fas fa-xmark"></i></button>
-      <div class="admin-modal-icon"><i class="fas fa-user-shield"></i></div>
-      <h3>Admin Access</h3>
-      <p>Enter your credentials to unlock the editor</p>
-      <div class="error-msg" id="adminError">Invalid username or password</div>
-      <input class="form-input" id="adminUsername" type="text" placeholder="Username" style="margin-bottom:0.5rem">
-      <input class="form-input" id="adminPassword" type="password" placeholder="••••••••">
-      <button class="btn-glow primary" style="width:100%;justify-content:center;margin-top:.5rem" onclick="verifyAdmin()">
-        <i class="fas fa-unlock"></i> Unlock
-      </button>
+      
+      <!-- ===== LOGIN VIEW ===== -->
+      <div id="adminLoginView" style="display:none">
+        <div class="admin-modal-icon"><i class="fas fa-user-shield"></i></div>
+        <h3>Login</h3>
+        <p>Enter your credentials to access the editor</p>
+        <div class="error-msg" id="adminError">Invalid credentials</div>
+        <div class="form-group" style="margin-bottom:.6rem">
+          <input class="form-input" id="adminUsername" type="text" placeholder="Username" autocomplete="username">
+        </div>
+        <div class="form-group" style="margin-bottom:.6rem">
+          <input class="form-input" id="adminPassword" type="password" placeholder="Password" autocomplete="current-password">
+        </div>
+        <button class="btn-glow primary" style="width:100%;justify-content:center;margin-top:.5rem" onclick="verifyAdmin()">
+          <i class="fas fa-unlock"></i> Login
+        </button>
+        <div class="admin-modal-links">
+          <a href="#" onclick="showAdminView('reset');return false"><i class="fas fa-key"></i> Forgot Password?</a>
+        </div>
+      </div>
+
+      <!-- ===== PASSWORD RESET VIEW ===== -->
+      <div id="adminResetView" style="display:none">
+        <div class="admin-modal-icon" style="background:rgba(245,158,11,.06);border-color:rgba(245,158,11,.15)">
+          <i class="fas fa-key" style="color:var(--neon-amber)"></i>
+        </div>
+        <h3>Reset Password</h3>
+        <p>Enter your username to receive a verification code</p>
+        <div class="error-msg" id="resetError">Error</div>
+        
+        <!-- Step 1: Enter username -->
+        <div id="resetStep1">
+          <div class="form-group" style="margin-bottom:.6rem">
+            <input class="form-input" id="resetUsername" type="text" placeholder="Username">
+          </div>
+          <button class="btn-glow primary" style="width:100%;justify-content:center;margin-top:.5rem" onclick="sendResetCode()">
+            <i class="fas fa-paper-plane"></i> Send Code via Email
+          </button>
+        </div>
+        <!-- Step 2: Enter OTP -->
+        <div id="resetStep2" style="display:none">
+          <div class="form-group" style="margin-bottom:.6rem">
+            <input class="form-input" id="resetOTP" type="text" placeholder="Enter 6-digit code" maxlength="6">
+          </div>
+          <div class="form-group" style="margin-bottom:.6rem">
+            <input class="form-input" id="resetNewPassword" type="password" placeholder="New Password (min 6 chars)">
+          </div>
+          <div class="form-group" style="margin-bottom:.6rem">
+            <input class="form-input" id="resetConfirmPassword" type="password" placeholder="Confirm New Password">
+          </div>
+          <button class="btn-glow primary" style="width:100%;justify-content:center;margin-top:.5rem" onclick="verifyOTPAndReset()">
+            <i class="fas fa-check"></i> Reset Password
+          </button>
+        </div>
+
+        <div class="admin-modal-links">
+          <a href="#" onclick="showAdminView('login');return false"><i class="fas fa-arrow-left"></i> Back to Login</a>
+        </div>
+      </div>
+
+      <!-- ===== USER MANAGEMENT VIEW (LIST) ===== -->
+      <div id="adminUsersView" style="display:none">
+        <div class="admin-modal-icon" style="background:rgba(139,92,246,.06);border-color:rgba(139,92,246,.15)">
+          <i class="fas fa-users-gear" style="color:var(--neon-violet)"></i>
+        </div>
+        <h3>User Management</h3>
+        <p>Manage admin users and their permissions</p>
+        <div class="form-group" style="margin-bottom:.8rem">
+          <div id="usersListContainer" class="manage-list" style="max-height:350px;overflow-y:auto"></div>
+        </div>
+        <button class="btn-glow primary" style="width:100%;justify-content:center;margin-top:.5rem" onclick="showUserForm('create')">
+          <i class="fas fa-user-plus"></i> Add New User
+        </button>
+        <div class="admin-modal-links">
+          <a href="#" onclick="closeAdminLogin();return false"><i class="fas fa-xmark"></i> Close</a>
+        </div>
+      </div>
+
+      <!-- ===== USER FORM VIEW (CREATE/EDIT) ===== -->
+      <div id="adminUserFormView" style="display:none">
+        <div class="admin-modal-icon" style="background:rgba(139,92,246,.06);border-color:rgba(139,92,246,.15)">
+          <i class="fas fa-user-edit" style="color:var(--neon-violet)"></i>
+        </div>
+        <h3 id="userFormTitle">Add New User</h3>
+        <p id="userFormDesc">Create a new user account</p>
+        <input type="hidden" id="editingUserId" value="">
+        <div class="form-group" style="margin-bottom:.5rem">
+          <input class="form-input" id="newUserUsername" type="text" placeholder="Username (min 3 chars)" required>
+        </div>
+        <div class="form-group" style="margin-bottom:.5rem">
+          <input class="form-input" id="newUserEmail" type="email" placeholder="Email address" required>
+        </div>
+        <div class="form-group" style="margin-bottom:.5rem">
+          <input class="form-input" id="newUserPassword" type="password" placeholder="Password (min 6 chars)" required>
+        </div>
+        <div class="form-group" style="margin-bottom:.5rem">
+          <input class="form-input" id="newUserConfirmPassword" type="password" placeholder="Confirm Password" required>
+        </div>
+        <div class="form-group" style="margin-bottom:.5rem">
+          <input class="form-input" id="newUserPhone" type="tel" placeholder="Phone with country code (e.g., +91 9876543210)" required title="Format: +CountryCode PhoneNumber (e.g., +91 9876543210)">
+          <small style="color:var(--text-muted);font-size:.75rem;margin-top:.25rem;display:block">Format: +CountryCode PhoneNumber (e.g., +91 9876543210)</small>
+        </div>
+        <div class="form-group" style="margin-bottom:.5rem">
+          <select class="form-select" id="newUserRole" required>
+            <option value="">Select Role</option>
+            <option value="Administrator">Administrator</option>
+            <option value="Editor" selected>Editor</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-top:.8rem">
+          <button class="btn-glow" style="flex:1;justify-content:center;background:rgba(107,114,128,.1);color:var(--text-muted);border-color:rgba(107,114,128,.2)" onclick="showUsersList()">
+            <i class="fas fa-arrow-left"></i> Back
+          </button>
+          <button class="btn-glow primary" id="userFormSubmitBtn" style="flex:2;justify-content:center" onclick="submitUserForm()">
+            <i class="fas fa-plus"></i> Create User
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>`);
+
+  // ======== CMS SETTINGS MODAL ========
+  document.body.insertAdjacentHTML('beforeend', `
+  <div class="cms-modal-overlay" id="cmsModalOverlay" onclick="closeCMSModal()"></div>
+  <div class="cms-modal" id="cmsModal">
+    <div class="cms-modal-header">
+      <h2><i class="fas fa-sliders"></i> Site Settings</h2>
+      <button class="cms-modal-close" onclick="closeCMSModal()"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="cms-modal-body" id="cmsModalBody">
+      <div class="cms-tabs">
+        <button class="cms-tab active" onclick="switchCMSTab('emailjs')">
+          <i class="fas fa-envelope"></i> EmailJS
+        </button>
+        <button class="cms-tab" onclick="switchCMSTab('site')">
+          <i class="fas fa-globe"></i> Site Config
+        </button>
+        <button class="cms-tab" onclick="switchCMSTab('categories')">
+          <i class="fas fa-tags"></i> Categories
+        </button>
+        <button class="cms-tab" onclick="switchCMSTab('articles')">
+          <i class="fas fa-newspaper"></i> Articles
+        </button>
+      </div>
+      
+      <!-- EmailJS Tab -->
+      <div id="cmsTabEmailJS" class="cms-tab-content active">
+        <div class="cms-form-group">
+          <label>Service ID</label>
+          <input type="text" id="emailjsServiceId" placeholder="service_xxxxxxx">
+          <div class="cms-form-help">Get from EmailJS dashboard</div>
+        </div>
+        <div class="cms-form-group">
+          <label>Template ID - Password Reset OTP</label>
+          <input type="text" id="emailjsTemplateOTP" placeholder="template_xxxxxxx">
+          <div class="cms-form-help">Template for sending OTP to registered email for password reset</div>
+        </div>
+        <div class="cms-form-group">
+          <label>Template ID - Welcome & Notifications</label>
+          <input type="text" id="emailjsTemplateWelcome" placeholder="template_xxxxxxx">
+          <div class="cms-form-help">Template for welcome email on subscription and new blog notifications</div>
+        </div>
+        <div class="cms-form-group">
+          <label>Public Key</label>
+          <input type="text" id="emailjsPublicKey" placeholder="Your public key">
+        </div>
+        <div class="cms-btn-group">
+          <button class="cms-btn cms-btn-primary" onclick="saveEmailJSConfig()">
+            <i class="fas fa-save"></i> Save EmailJS Config
+          </button>
+          <button class="cms-btn cms-btn-secondary" onclick="testEmailJS()">
+            <i class="fas fa-paper-plane"></i> Test Email
+          </button>
+        </div>
+      </div>
+      
+      <!-- Site Config Tab -->
+      <div id="cmsTabSite" class="cms-tab-content">
+        <div class="cms-form-group">
+          <label>Site Title</label>
+          <input type="text" id="siteTitle" placeholder="KloudVin">
+        </div>
+        <div class="cms-form-group">
+          <label>Site Description</label>
+          <textarea id="siteDescription" placeholder="Your site description"></textarea>
+        </div>
+        <div class="cms-form-group">
+          <label>Azure Storage Account</label>
+          <input type="text" id="azureStorageAccount" value="kloudvin" readonly>
+          <div class="cms-form-help">Storage account for images</div>
+        </div>
+        <div class="cms-form-group">
+          <label>Images Container</label>
+          <input type="text" id="azureImagesContainer" value="images" readonly>
+        </div>
+        <div class="cms-btn-group">
+          <button class="cms-btn cms-btn-primary" onclick="saveSiteConfig()">
+            <i class="fas fa-save"></i> Save Site Config
+          </button>
+        </div>
+      </div>
+      
+      <!-- Categories Tab -->
+      <div id="cmsTabCategories" class="cms-tab-content">
+        <div class="cms-form-group">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+            <div>
+              <h3 style="margin:0;font-size:1.1rem;color:var(--text-primary)">Manage Categories</h3>
+              <p style="margin:.25rem 0 0;font-size:.85rem;color:var(--text-muted)">Add, edit, or delete categories for article classification</p>
+              <p style="margin:.5rem 0 0;font-size:.8rem;color:var(--neon-amber)">
+                <i class="fas fa-info-circle"></i> Changes are saved automatically. Categories control the dropdown in New Article form.
+              </p>
+            </div>
+            <button class="cms-btn cms-btn-primary" onclick="openAddCategoryModal()">
+              <i class="fas fa-plus"></i> Add Category
+            </button>
+          </div>
+          <div id="categoriesListContainer" style="max-height:450px;overflow-y:auto">
+            <div style="text-align:center;padding:2rem;color:var(--text-muted)">
+              <i class="fas fa-spinner fa-spin" style="font-size:2rem;margin-bottom:1rem;display:block"></i>
+              Loading categories...
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Articles Tab -->
+      <div id="cmsTabArticles" class="cms-tab-content">
+        <div class="cms-form-group">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+            <div>
+              <h3 style="margin:0;font-size:1.1rem;color:var(--text-primary)">Manage Articles</h3>
+              <p style="margin:.25rem 0 0;font-size:.85rem;color:var(--text-muted)">Edit, delete, or view all published articles</p>
+            </div>
+            <button class="cms-btn cms-btn-primary" onclick="refreshArticlesList()">
+              <i class="fas fa-sync"></i> Refresh
+            </button>
+          </div>
+          <div id="articlesListContainer" style="max-height:450px;overflow-y:auto">
+            <div style="text-align:center;padding:2rem;color:var(--text-muted)">
+              <i class="fas fa-spinner fa-spin" style="font-size:2rem;margin-bottom:1rem;display:block"></i>
+              Loading articles...
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>`);
 
@@ -110,7 +349,12 @@ function loadComponents(isSubPage) {
   <div class="editor-panel" id="editorPanel">
     <div class="editor-header">
       <h2><i class="fas fa-pen-to-square"></i> New Article</h2>
-      <button class="editor-close" onclick="closeEditor()"><i class="fas fa-xmark"></i></button>
+      <div style="display:flex;gap:0.5rem;align-items:center">
+        <button class="editor-help-btn" onclick="window.open('ARTICLE-CREATION-GUIDE.md', '_blank')" title="Help Guide">
+          <i class="fas fa-circle-question"></i> Help
+        </button>
+        <button class="editor-close" onclick="closeEditor()"><i class="fas fa-xmark"></i></button>
+      </div>
     </div>
 
     <!-- MODE TOGGLE -->
@@ -127,36 +371,13 @@ function loadComponents(isSubPage) {
       <div class="form-group">
         <label class="form-label">Category / Topic</label>
         <select class="form-select" id="artCategory">
-          <option value="Cloud">☁️ Cloud</option>
-          <option value="DevOps">♾️ DevOps & CI/CD</option>
-          <option value="Kubernetes">☸ Kubernetes</option>
-          <option value="Networking">🔒 Networking & Security</option>
-          <option value="Linux">🐧 Linux / Windows</option>
-          <option value="IaC">📦 Infrastructure as Code</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Read Time</label>
-        <select class="form-select" id="artReadTime">
-          <option value="3 min read">3 min</option>
-          <option value="5 min read">5 min</option>
-          <option value="8 min read" selected>8 min</option>
-          <option value="10 min read">10 min</option>
-          <option value="15 min read">15 min</option>
-          <option value="20 min read">20 min</option>
+          <!-- Categories will be loaded dynamically -->
         </select>
       </div>
     </div>
     <div class="form-group">
       <label class="form-label">Short Description</label>
       <input class="form-input" id="artDesc" placeholder="A brief summary that appears on the blog card...">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Tags</label>
-      <div class="tag-input-wrap" id="tagWrap">
-        <input class="tag-input" id="tagInput" placeholder="Type tag & press Enter...">
-      </div>
-      <div class="form-hint"><i class="fas fa-circle-info"></i> Press Enter after each tag</div>
     </div>
 
     <!-- ========== WRITE MODE ========== -->
@@ -175,7 +396,10 @@ function loadComponents(isSubPage) {
           <button title="Code block" onclick="insertMd('\\n\`\`\`\\n','\\n\`\`\`')"><i class="fas fa-terminal"></i></button>
           <button title="Link" onclick="insertMd('[','](url)')"><i class="fas fa-link"></i></button>
           <button title="Quote" onclick="insertMd('\\n> ','')"><i class="fas fa-quote-left"></i></button>
+          <div class="toolbar-sep"></div>
+          <button title="Upload Image" onclick="triggerImageUpload()"><i class="fas fa-image"></i></button>
         </div>
+        <input type="file" id="imageUploadInput" accept="image/*" style="display:none" onchange="handleImageUpload(event)">
         <textarea class="form-textarea" id="artContent" placeholder="Write your article in Markdown...&#10;&#10;## Introduction&#10;Start writing here...&#10;&#10;\`\`\`bash&#10;kubectl apply -f deploy.yaml&#10;\`\`\`"></textarea>
         <div class="form-hint"><i class="fas fa-circle-info"></i> Supports Markdown: **bold**, *italic*, \`code\`, ## headings</div>
       </div>
@@ -191,7 +415,7 @@ function loadComponents(isSubPage) {
             <div class="upload-icon"><i class="fas fa-cloud-arrow-up"></i></div>
             <p class="upload-title">Drag & drop your file here</p>
             <p class="upload-sub">or <span class="upload-browse" onclick="document.getElementById('fileInput').click()">browse files</span></p>
-            <div class="upload-formats"><i class="fas fa-file-lines"></i> .md &nbsp; <i class="fas fa-file-lines"></i> .txt &nbsp; <i class="fas fa-code"></i> .html &nbsp; <i class="fas fa-file-word"></i> .docx</div>
+            <div class="upload-formats"><i class="fas fa-file-lines"></i> .md &nbsp; <i class="fas fa-file-lines"></i> .txt &nbsp; <i class="fas fa-code"></i> .html &nbsp; <i class="fas fa-file-word"></i> .doc/.docx</div>
           </div>
         </div>
         <!-- File preview after upload -->
@@ -211,6 +435,22 @@ function loadComponents(isSubPage) {
       <div class="form-group" id="uploadPreviewGroup" style="display:none">
         <label class="form-label">Content Preview <span style="color:var(--neon-cyan);font-size:.7rem;text-transform:none;letter-spacing:0">(extracted from file)</span></label>
         <div class="upload-preview" id="uploadPreview"></div>
+      </div>
+
+      <!-- Image Upload Section -->
+      <div class="form-group">
+        <label class="form-label">Upload Images <span style="color:var(--neon-cyan);font-size:.7rem;text-transform:none;letter-spacing:0">(for use in your article)</span></label>
+        <div class="image-upload-section">
+          <input type="file" id="uploadModeImageInput" accept="image/*" style="display:none" onchange="handleUploadModeImageUpload(event)">
+          <button class="btn-upload-image" onclick="document.getElementById('uploadModeImageInput').click()">
+            <i class="fas fa-image"></i> Upload Image
+          </button>
+          <div class="form-hint" style="margin-top:8px">
+            <i class="fas fa-circle-info"></i> Upload images and copy the URL to use in your markdown
+          </div>
+        </div>
+        <!-- Uploaded images list -->
+        <div id="uploadedImagesList" style="margin-top:12px"></div>
       </div>
     </div>
 

@@ -11,6 +11,9 @@
   },
   "routes": [
     {
+      "route": "/.data-api/*"
+    },
+    {
       "route": "/blog",
       "rewrite": "/pages/blog.html"
     },
@@ -21,10 +24,6 @@
     {
       "route": "/article",
       "rewrite": "/pages/article.html"
-    },
-    {
-      "route": "/.data-api/*",
-      "allowedRoles": ["anonymous", "authenticated"]
     }
   ],
   "responseOverrides": {
@@ -43,6 +42,5 @@
   "mimeTypes": {
     ".json": "application/json",
     ".md": "text/markdown"
-  },
-  "dataApiLocation": "/swa-db-connections"
+  }
 }

@@ -155,37 +155,6 @@ async function renderPostsSub(containerId, limit) {
 let isAdmin = false;
 let currentUser = null;
 
-// Check session on page load
-function checkUserSession() {
-  currentUser = getUserSession();
-  if (currentUser && currentUser.is_admin) {
-    isAdmin = true;
-    document.body.classList.add('admin-mode');
-    const badge = document.getElementById('adminBadge');
-    if (badge) badge.classList.add('show');
-    const lock = document.getElementById('adminLock');
-    if (lock) { 
-      lock.classList.add('unlocked'); 
-      lock.innerHTML = '<i class="fas fa-lock-open"></i>'; 
-      lock.title = 'Logout Admin'; 
-    }
-  }
-}
-
-function openAdminLogin() {
-  if (isAdmin) { logoutAdmin(); return; }
-  const overlay = document.getElementById('adminModalOverlay');
-  if (overlay) {
-    overlay.classList.add('open');
-    const usernameInput = document.getElementById('adminUsername');
-    const pwd = document.getElementById('adminPassword');
-    if (usernameInput) { usernameInput.value = ''; }
-    if (pwd) { pwd.value = ''; setTimeout(() => usernameInput ? usernameInput.focus() : pwd.focus(), 300); }
-    const err = document.getElementById('adminError');
-    if (err) err.classList.remove('show');
-  }
-}
-
 function closeAdminLogin() {
   const overlay = document.getElementById('adminModalOverlay');
   if (overlay) overlay.classList.remove('open');
@@ -205,34 +174,61 @@ async function verifyAdmin() {
   
   try {
     // Fetch user from database
+    console.log('Attempting to fetch user:', username);
     const user = await getUserByUsername(username);
+    console.log('User fetched:', user);
+    console.log('Password entered:', password);
+    console.log('Password in DB:', user ? user.password_hash : 'NO USER');
     
-    if (user && user.password_hash === password) {
+    // Check for temporary password (from password reset)
+    const tempPasswordKey = `temp_password_${user?.id}`;
+    const tempPassword = localStorage.getItem(tempPasswordKey);
+    
+    if (user && (user.password_hash === password || tempPassword === password)) {
+      // If using temp password, clear it
+      if (tempPassword === password) {
+        localStorage.removeItem(tempPasswordKey);
+        console.log('Logged in with temporary password');
+      }
+      
       // Successful login
       isAdmin = user.is_admin;
       currentUser = user;
       
-      // Update last login
-      await updateLastLogin(user.id);
-      
       // Store session
       setUserSession(user);
       
-      if (isAdmin) {
-        document.body.classList.add('admin-mode');
-        const badge = document.getElementById('adminBadge');
-        if (badge) badge.classList.add('show');
-        const lock = document.getElementById('adminLock');
-        if (lock) { 
-          lock.classList.add('unlocked'); 
-          lock.innerHTML = '<i class="fas fa-lock-open"></i>'; 
-          lock.title = 'Logout Admin'; 
-        }
-        closeAdminLogin();
-        showToast('Welcome back, ' + user.username + '! Editor unlocked 🔓');
+      // Show/hide admin-only buttons based on is_admin flag
+      console.log('Login - User is_admin:', user.is_admin, 'Type:', typeof user.is_admin);
+      
+      if (user.is_admin === true || user.is_admin === 1) {
+        // Administrator - add administrator-mode class
+        console.log('Administrator login');
+        document.body.classList.add('administrator-mode');
       } else {
-        showToast('Login successful, but you need admin privileges', true);
+        // Editor - add editor-mode class
+        console.log('Editor login');
+        document.body.classList.add('editor-mode');
+        document.body.classList.remove('administrator-mode');
       }
+      
+      // Enable editor mode for all logged-in users
+      document.body.classList.add('admin-mode');
+      const badge = document.getElementById('adminBadge');
+      if (badge) {
+        badge.classList.add('show');
+        // Show username and role
+        badge.innerHTML = `<i class="fas fa-shield"></i> ${user.username}`;
+        badge.title = `Role: ${user.role}`;
+      }
+      const lock = document.getElementById('adminLock');
+      if (lock) { 
+        lock.classList.add('unlocked'); 
+        lock.innerHTML = '<i class="fas fa-lock-open"></i>'; 
+        lock.title = 'Logout'; 
+      }
+      closeAdminLogin();
+      showToast('Welcome back, ' + user.username + '! 🔓');
     } else {
       const err = document.getElementById('adminError');
       if (err) { 
@@ -257,15 +253,17 @@ function logoutAdmin() {
   clearUserSession();
   
   document.body.classList.remove('admin-mode');
+  document.body.classList.remove('administrator-mode');
+  document.body.classList.remove('editor-mode');
   const badge = document.getElementById('adminBadge');
   if (badge) badge.classList.remove('show');
   const lock = document.getElementById('adminLock');
   if (lock) { 
     lock.classList.remove('unlocked'); 
     lock.innerHTML = '<i class="fas fa-lock"></i>'; 
-    lock.title = 'Admin'; 
+    lock.title = 'Login'; 
   }
-  showToast('Logged out of admin mode');
+  showToast('Logged out successfully');
 }
 
 // ---- EDITOR ----
@@ -370,6 +368,11 @@ function readTextFile(file, ext, statusEl) {
     statusEl.innerHTML = '<i class="fas fa-check-circle"></i> Ready';
     statusEl.className = 'upload-file-status';
 
+    // Check for local image references in markdown
+    if (ext === '.md') {
+      detectLocalImages(content);
+    }
+
     // Show preview
     showUploadPreview(content);
 
@@ -387,30 +390,71 @@ function readTextFile(file, ext, statusEl) {
 }
 
 function readDocxFile(file, statusEl) {
-  // Use a simple zip-based approach to extract text from docx
+  // Use Azure Function to convert DOCX to Markdown with image extraction
   const reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = async function(e) {
     try {
       const arrayBuffer = e.target.result;
-      extractDocxText(arrayBuffer).then(function(text) {
-        uploadedFileContent = text;
+      
+      // Convert to base64
+      const base64 = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+      );
+      
+      console.log('DOCX file size:', file.size, 'bytes');
+      console.log('Base64 size:', base64.length, 'characters');
+      
+      // Call Azure Function
+      statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Converting DOCX...';
+      statusEl.className = 'upload-file-status processing';
+      
+      const response = await fetch('https://kloudvin-functions-geftgkb3dehxhag7.centralus-01.azurewebsites.net/api/convertDocx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ docx: base64 })
+      });
+      
+      console.log('Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Response error:', errorText);
+        throw new Error('Conversion failed: ' + response.status);
+      }
+      
+      const result = await response.json();
+      console.log('Conversion result:', result);
+      console.log('Markdown content:', result.markdown ? result.markdown.substring(0, 200) + '...' : 'UNDEFINED');
+      console.log('Success flag:', result.success);
+      
+      if (result.success && result.markdown) {
+        uploadedFileContent = result.markdown;
         statusEl.innerHTML = '<i class="fas fa-check-circle"></i> Ready';
         statusEl.className = 'upload-file-status';
+        showUploadPreview(result.markdown);
+        autoFillFromContent(result.markdown);
+        showToast('DOCX converted with images extracted! ✅');
+      } else {
+        throw new Error(result.error || 'Conversion failed - no markdown returned');
+      }
+    } catch(err) {
+      console.error('DOCX conversion error:', err);
+      console.error('Error details:', err.message);
+      // Fallback to basic extraction
+      try {
+        const arrayBuffer = e.target.result;
+        const text = await extractDocxText(arrayBuffer);
+        uploadedFileContent = text;
+        statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Basic';
+        statusEl.className = 'upload-file-status processing';
         showUploadPreview(text);
         autoFillFromContent(text);
-        showToast('DOCX content extracted! ✅');
-      }).catch(function(err) {
-        // Fallback: read as text
-        uploadedFileContent = '[Could not fully parse DOCX. Please use .md or .txt format for best results.]';
-        statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Partial';
-        statusEl.className = 'upload-file-status processing';
-        showUploadPreview(uploadedFileContent);
-        showToast('DOCX parsing limited. Try .md or .txt for best results.', true);
-      });
-    } catch(err) {
-      statusEl.innerHTML = '<i class="fas fa-times-circle"></i> Error';
-      statusEl.className = 'upload-file-status error';
-      showToast('Failed to read DOCX file', true);
+        showToast('DOCX text extracted (images not supported in fallback mode)', true);
+      } catch(fallbackErr) {
+        statusEl.innerHTML = '<i class="fas fa-times-circle"></i> Error';
+        statusEl.className = 'upload-file-status error';
+        showToast('Failed to read DOCX file', true);
+      }
     }
   };
   reader.readAsArrayBuffer(file);
@@ -513,6 +557,36 @@ function htmlToMarkdown(html) {
   return content;
 }
 
+function detectLocalImages(content) {
+  // Detect local image references in markdown: ![alt](./image.png) or ![alt](image.png)
+  const localImageRegex = /!\[([^\]]*)\]\((?!https?:\/\/)([^)]+)\)/g;
+  const matches = [];
+  let match;
+  
+  while ((match = localImageRegex.exec(content)) !== null) {
+    matches.push({
+      fullMatch: match[0],
+      alt: match[1],
+      path: match[2]
+    });
+  }
+  
+  if (matches.length > 0) {
+    console.log('📷 Local images detected in markdown:');
+    matches.forEach(m => console.log(`  - ${m.path}`));
+    console.log('\n📝 To use images in your article:');
+    console.log('1. Click the 📷 button in Write mode to upload each image');
+    console.log('2. Copy the returned Azure Blob URL');
+    console.log('3. Replace local paths with: https://kloudvin.blob.core.windows.net/images/[filename]');
+    
+    showToast(
+      `⚠️ Found ${matches.length} local image(s). Check console for details and upload instructions.`,
+      false,
+      5000
+    );
+  }
+}
+
 function showUploadPreview(content) {
   const group = document.getElementById('uploadPreviewGroup');
   const preview = document.getElementById('uploadPreview');
@@ -524,26 +598,78 @@ function showUploadPreview(content) {
 }
 
 function autoFillFromContent(content) {
-  // If title is empty, try extracting first heading
+  // Check if content is valid
+  if (!content || typeof content !== 'string') {
+    console.warn('autoFillFromContent: invalid content', content);
+    return;
+  }
+  
+  // If title is empty, try extracting document title
   const titleInput = document.getElementById('artTitle');
-  if (titleInput && !titleInput.value.trim()) {
-    const h1Match = content.match(/^#\s+(.+)$/m);
-    const h2Match = content.match(/^##\s+(.+)$/m);
-    const firstLine = content.split('\n').find(function(l) { return l.trim().length > 5; });
-    if (h1Match) titleInput.value = h1Match[1].trim();
-    else if (h2Match) titleInput.value = h2Match[1].trim();
-    else if (firstLine && firstLine.length < 120) titleInput.value = firstLine.trim();
+  if (titleInput && titleInput.value !== undefined && titleInput.value !== null && !titleInput.value.trim()) {
+    const lines = content.split('\n');
+    let extractedTitle = '';
+    let titleLineIndex = -1;
+    
+    // Look for the first non-empty line that's NOT a heading (document title)
+    for (let i = 0; i < lines.length && i < 10; i++) {
+      const line = lines[i].trim();
+      if (line.length > 5 && !line.startsWith('#') && line.length < 120) {
+        extractedTitle = line;
+        titleLineIndex = i;
+        break;
+      }
+    }
+    
+    // If no document title found, fall back to first heading
+    if (!extractedTitle) {
+      const h1Match = content.match(/^#\s+(.+)$/m);
+      const h2Match = content.match(/^##\s+(.+)$/m);
+      if (h1Match && h1Match[1]) extractedTitle = h1Match[1].trim();
+      else if (h2Match && h2Match[1]) extractedTitle = h2Match[1].trim();
+    }
+    
+    // Clean up the title - remove markdown formatting
+    if (extractedTitle) {
+      extractedTitle = extractedTitle
+        .replace(/^__(.+?)__$/, '$1')  // Remove surrounding underscores
+        .replace(/^\*\*(.+?)\*\*$/, '$1')  // Remove surrounding asterisks
+        .replace(/__/g, '')  // Remove any remaining underscores
+        .replace(/\*\*/g, '')  // Remove any remaining asterisks
+        .replace(/_/g, '')  // Remove single underscores
+        .replace(/\*/g, '')  // Remove single asterisks
+        .trim();
+      titleInput.value = extractedTitle;
+      
+      // Remove the title line from content if found
+      if (titleLineIndex >= 0) {
+        lines.splice(titleLineIndex, 1);
+        uploadedFileContent = lines.join('\n').trim();
+      }
+    }
   }
 
   // If description is empty, try extracting first paragraph
   const descInput = document.getElementById('artDesc');
-  if (descInput && !descInput.value.trim()) {
+  if (descInput && descInput.value !== undefined && descInput.value !== null && !descInput.value.trim()) {
     const lines = content.split('\n').filter(function(l) {
       const t = l.trim();
-      return t.length > 20 && !t.startsWith('#') && !t.startsWith('```') && !t.startsWith('>') && !t.startsWith('-');
+      // Skip headings, code blocks, quotes, lists, and "Contents"
+      return t.length > 20 && 
+             !t.startsWith('#') && 
+             !t.startsWith('```') && 
+             !t.startsWith('>') && 
+             !t.startsWith('-') &&
+             !t.match(/^Contents$/i);
     });
-    if (lines.length) {
-      const firstPara = lines[0].trim();
+    if (lines.length && lines[0]) {
+      let firstPara = lines[0].trim();
+      // Clean up markdown formatting from description
+      firstPara = firstPara
+        .replace(/__/g, '')
+        .replace(/\*\*/g, '')
+        .replace(/\*/g, '')
+        .replace(/_/g, '');
       descInput.value = firstPara.length > 160 ? firstPara.substring(0, 157) + '...' : firstPara;
     }
   }
@@ -576,6 +702,8 @@ function openEditor() {
   // Reset to write mode and clear upload state
   switchEditorMode('write');
   removeUploadedFile();
+  // Populate category dropdown
+  updateCategoryDropdowns();
 }
 
 function closeEditor() {
@@ -633,11 +761,165 @@ function insertMd(before, after) {
   ta.setSelectionRange(start + before.length, start + before.length + (selected || 'text').length);
 }
 
+// ---- IMAGE UPLOAD ----
+function triggerImageUpload() {
+  const input = document.getElementById('imageUploadInput');
+  if (input) input.click();
+}
+
+async function handleImageUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  // Validate file type
+  if (!file.type.startsWith('image/')) {
+    showToast('Please select an image file', true);
+    return;
+  }
+  
+  // Validate file size (max 5MB)
+  if (file.size > 5 * 1024 * 1024) {
+    showToast('Image size must be less than 5MB', true);
+    return;
+  }
+  
+  try {
+    showToast('Uploading image...');
+    
+    // Create FormData
+    const formData = new FormData();
+    formData.append('image', file);
+    
+    // Upload to Azure Function
+    const response = await fetch('https://kloudvin-functions-geftgkb3dehxhag7.centralus-01.azurewebsites.net/api/uploadImage', {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!response.ok) {
+      throw new Error('Upload failed');
+    }
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      // Insert markdown image syntax at cursor position
+      const imageMarkdown = `\n![${file.name}](${result.url})\n`;
+      const ta = document.getElementById('artContent');
+      if (ta) {
+        const start = ta.selectionStart;
+        ta.value = ta.value.substring(0, start) + imageMarkdown + ta.value.substring(start);
+        ta.focus();
+        ta.setSelectionRange(start + imageMarkdown.length, start + imageMarkdown.length);
+      }
+      showToast('Image uploaded successfully! ✅');
+    } else {
+      throw new Error(result.error || 'Upload failed');
+    }
+  } catch (error) {
+    console.error('Image upload error:', error);
+    showToast('Failed to upload image. Please try again.', true);
+  } finally {
+    // Reset file input
+    event.target.value = '';
+  }
+}
+
+// ---- IMAGE UPLOAD IN UPLOAD MODE ----
+async function handleUploadModeImageUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  // Validate file type
+  if (!file.type.startsWith('image/')) {
+    showToast('Please select an image file', true);
+    return;
+  }
+  
+  // Validate file size (max 5MB)
+  if (file.size > 5 * 1024 * 1024) {
+    showToast('Image size must be less than 5MB', true);
+    return;
+  }
+  
+  try {
+    showToast('Uploading image...');
+    
+    // Create FormData
+    const formData = new FormData();
+    formData.append('image', file);
+    
+    // Upload to Azure Function
+    const response = await fetch('https://kloudvin-functions-geftgkb3dehxhag7.centralus-01.azurewebsites.net/api/uploadImage', {
+      method: 'POST',
+      body: formData
+    });
+    
+    if (!response.ok) {
+      throw new Error('Upload failed');
+    }
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      // Add to uploaded images list
+      addUploadedImageToList(file.name, result.url);
+      showToast('Image uploaded successfully! ✅');
+    } else {
+      throw new Error(result.error || 'Upload failed');
+    }
+  } catch (error) {
+    console.error('Image upload error:', error);
+    showToast('Failed to upload image. Please try again.', true);
+  } finally {
+    // Reset file input
+    event.target.value = '';
+  }
+}
+
+function addUploadedImageToList(filename, url) {
+  const listContainer = document.getElementById('uploadedImagesList');
+  if (!listContainer) return;
+  
+  const item = document.createElement('div');
+  item.className = 'uploaded-image-item';
+  item.innerHTML = `
+    <img src="${url}" alt="${filename}" class="uploaded-image-thumb">
+    <div class="uploaded-image-info">
+      <div class="uploaded-image-name">${filename}</div>
+      <div class="uploaded-image-url">${url}</div>
+    </div>
+    <div class="uploaded-image-actions">
+      <button class="btn-copy-url" onclick="copyImageUrl('${url}')">
+        <i class="fas fa-copy"></i> Copy URL
+      </button>
+    </div>
+  `;
+  listContainer.appendChild(item);
+}
+
+function copyImageUrl(url) {
+  navigator.clipboard.writeText(url).then(() => {
+    showToast('URL copied to clipboard! ✅');
+  }).catch(() => {
+    showToast('Failed to copy URL', true);
+  });
+}
+
 async function publishArticle() {
-  const title = document.getElementById('artTitle').value.trim();
-  const category = document.getElementById('artCategory').value;
-  const readTime = document.getElementById('artReadTime').value;
-  const desc = document.getElementById('artDesc').value.trim();
+  const titleEl = document.getElementById('artTitle');
+  const categoryEl = document.getElementById('artCategory');
+  const descEl = document.getElementById('artDesc');
+  const contentEl = document.getElementById('artContent');
+
+  if (!titleEl || !categoryEl || !descEl) {
+    showToast('Form elements not found. Please refresh the page.', true);
+    return;
+  }
+
+  const title = (titleEl.value || '').trim();
+  const category = categoryEl.value || '';
+  const desc = (descEl.value || '').trim();
 
   // Get content from either write mode or upload mode
   let content;
@@ -645,7 +927,11 @@ async function publishArticle() {
     if (!uploadedFileContent) { showToast('Please upload a file first!', true); return; }
     content = uploadedFileContent;
   } else {
-    content = document.getElementById('artContent').value.trim();
+    if (!contentEl) {
+      showToast('Content editor not found. Please refresh the page.', true);
+      return;
+    }
+    content = (contentEl.value || '').trim();
   }
 
   if (!title) { showToast('Please enter an article title!', true); return; }
@@ -655,22 +941,30 @@ async function publishArticle() {
   const now = new Date();
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const dateStr = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
-  const id = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/,'');
+  
+  // Generate ID from title
+  let baseId = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  
+  // If ID is empty or too short, use a timestamp
+  if (!baseId || baseId.length < 3) {
+    baseId = 'article-' + Date.now();
+  }
+  
+  let id = baseId;
+  let attempt = 0;
 
   const article = { 
     id, 
     title, 
     description: desc, 
     category, 
-    read_time: readTime, 
-    tags: [...currentTags], 
     date_published: dateStr, 
     content,
     author_id: currentUser ? currentUser.id : null
   };
 
   try {
-    // Save to database
+    // Try to save to database
     await createArticle(article);
     
     // Add to local array for immediate display
@@ -680,8 +974,6 @@ async function publishArticle() {
     document.getElementById('artTitle').value = '';
     document.getElementById('artDesc').value = '';
     document.getElementById('artContent').value = '';
-    currentTags = [];
-    renderTags();
     removeUploadedFile();
     switchEditorMode('write');
     closeEditor();
@@ -695,7 +987,13 @@ async function publishArticle() {
     }
   } catch (error) {
     console.error('Error publishing article:', error);
-    showToast('Failed to publish article. Please try again.', true);
+    
+    // If it's a conflict error (409), suggest changing the title
+    if (error.message.includes('Conflict') || error.message.includes('409')) {
+      showToast('An article with this title already exists. Please change the title or delete the existing article.', true);
+    } else {
+      showToast('Failed to publish article. Please try again.', true);
+    }
   }
 }
 
@@ -703,35 +1001,61 @@ async function publishArticle() {
 function renderMarkdown(md) {
   if (!md) return '<p>No content yet.</p>';
   let html = md
+    // Code blocks (must be first)
     .replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+    // Inline code
     .replace(/`([^`]+)`/g, '<code>$1</code>')
+    // Headings
+    .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
     .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    // Bold - handle both ** and __
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(.+?)__/g, '<strong>$1</strong>')
+    // Italic - handle both * and _
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/_(.+?)_/g, '<em>$1</em>')
+    // Blockquotes
     .replace(/^> (.+)$/gm, '<blockquote><p>$1</p></blockquote>')
+    // Horizontal rules
     .replace(/^---$/gm, '<hr>')
+    .replace(/^___$/gm, '<hr>')
+    .replace(/^\*\*\*$/gm, '<hr>')
+    // Lists
     .replace(/^- (.+)$/gm, '<ul><li>$1</li></ul>')
+    .replace(/^\* (.+)$/gm, '<ul><li>$1</li></ul>')
     .replace(/^\d+\. (.+)$/gm, '<ol><li>$1</li></ol>')
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">')
+    // Images (must be before links)
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;height:auto;margin:1rem 0">')
+    // Links
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+  
   // Merge consecutive ul/ol
   html = html.replace(/<\/ul>\s*<ul>/g, '').replace(/<\/ol>\s*<ol>/g, '');
+  
+  // Merge consecutive blockquotes
+  html = html.replace(/<\/blockquote>\s*<blockquote>/g, '');
+  
   // Wrap loose lines in <p>
   html = html.split('\n').map(line => {
     const trimmed = line.trim();
-    if (trimmed && !trimmed.match(/^<(h[1-6]|pre|code|blockquote|li|hr|ul|ol|img|strong|em|a|div|section)/))
+    if (trimmed && !trimmed.match(/^<(h[1-6]|pre|code|blockquote|li|hr|ul|ol|img|strong|em|a|div|section|table)/))
       return `<p>${trimmed}</p>`;
     return line;
   }).join('\n');
+  
   // Clean empty paragraphs
   html = html.replace(/<p>\s*<\/p>/g, '');
+  
+  // Clean up extra whitespace
+  html = html.replace(/\n{3,}/g, '\n\n');
+  
   return html;
 }
 
 // ---- TOAST ----
-function showToast(msg, isError) {
+function showToast(msg, isError, duration) {
   const toast = document.getElementById('toast');
   const toastMsg = document.getElementById('toastMsg');
   if (!toast || !toastMsg) return;
@@ -740,7 +1064,7 @@ function showToast(msg, isError) {
   toast.style.color = isError ? 'var(--neon-rose)' : 'var(--neon-emerald)';
   toast.querySelector('i').className = isError ? 'fas fa-exclamation-circle' : 'fas fa-check-circle';
   toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 3000);
+  setTimeout(() => toast.classList.remove('show'), duration || 3000);
 }
 
 // ---- NAVBAR SCROLL ----
@@ -805,6 +1129,1144 @@ function initApp() {
   initTagInput();
   initAdminModal();
   checkUserSession(); // Check if user is already logged in
+  renderTopicCards(); // Render dynamic topic cards on homepage
+  renderBlogFilters(); // Render dynamic filter buttons on blog page
 }
 
 document.addEventListener('DOMContentLoaded', initApp);
+
+
+// ================================================================
+// MULTI-VIEW ADMIN MODAL SYSTEM
+// ================================================================
+
+let currentAdminView = 'login'; // 'login', 'reset', 'users'
+let resetUserData = null; // Stores user data during password reset
+
+function showAdminView(view) {
+  currentAdminView = view;
+  const loginView = document.getElementById('adminLoginView');
+  const resetView = document.getElementById('adminResetView');
+  const usersView = document.getElementById('adminUsersView');
+  const userFormView = document.getElementById('adminUserFormView');
+  
+  if (loginView) loginView.style.display = 'none';
+  if (resetView) resetView.style.display = 'none';
+  if (usersView) usersView.style.display = 'none';
+  if (userFormView) userFormView.style.display = 'none';
+  
+  if (view === 'login' && loginView) {
+    loginView.style.display = '';
+    const uInput = document.getElementById('adminUsername');
+    if (uInput) { uInput.value = ''; setTimeout(() => uInput.focus(), 300); }
+    const pInput = document.getElementById('adminPassword');
+    if (pInput) pInput.value = '';
+    const err = document.getElementById('adminError');
+    if (err) err.classList.remove('show');
+  } else if (view === 'reset' && resetView) {
+    resetView.style.display = '';
+    // Reset to step 1
+    document.getElementById('resetStep1').style.display = '';
+    document.getElementById('resetStep2').style.display = 'none';
+    const emailInput = document.getElementById('resetEmail');
+    if (emailInput) { emailInput.value = ''; setTimeout(() => emailInput.focus(), 300); }
+    const phoneInput = document.getElementById('resetPhone');
+    if (phoneInput) phoneInput.value = '';
+    const err = document.getElementById('resetError');
+    if (err) err.classList.remove('show');
+  } else if (view === 'users' && usersView) {
+    // Only Administrators can access user management
+    const session = getUserSession();
+    if (!session || session.role !== 'Administrator') {
+      showToast('Only Administrators can manage users', true);
+      return;
+    }
+    usersView.style.display = '';
+    renderUsersList();
+  }
+}
+
+// Update openAdminLogin to show login view
+function openAdminLogin() {
+  // If any user is logged in, logout
+  if (currentUser) { logoutAdmin(); return; }
+  // Otherwise show login
+  const overlay = document.getElementById('adminModalOverlay');
+  if (!overlay) return;
+  showAdminView('login');
+  overlay.classList.add('open');
+}
+
+// Separate function for opening Users panel
+function openUsersPanel() {
+  // Close CMS modal if open
+  closeCMSModal();
+  
+  const overlay = document.getElementById('adminModalOverlay');
+  if (!overlay) return;
+  showAdminView('users');
+  overlay.classList.add('open');
+}
+
+// ================================================================
+// PASSWORD RESET WITH OTP (EmailJS + Firebase)
+// ================================================================
+
+// Generate 6-digit OTP
+function generateOTP() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Send reset code via email
+async function sendResetCode() {
+  const username = document.getElementById('resetUsername').value.trim();
+  const errEl = document.getElementById('resetError');
+  
+  if (!username) {
+    if (errEl) { errEl.textContent = 'Please enter your username'; errEl.classList.add('show'); }
+    return;
+  }
+  
+  try {
+    // Find user by username
+    const user = await getUserByUsername(username);
+    if (!user) {
+      if (errEl) { errEl.textContent = 'No account found with this username'; errEl.classList.add('show'); }
+      return;
+    }
+    
+    // Check if user has email
+    if (!user.email) {
+      if (errEl) { errEl.textContent = 'No email address registered for this account'; errEl.classList.add('show'); }
+      return;
+    }
+    
+    // Generate OTP
+    const otpCode = generateOTP();
+    resetUserData = { ...user, otpCode };
+    
+    // Save OTP to database
+    await updateUserOTP(user.id, otpCode, 'email');
+    
+    // Send OTP via email
+    await sendOTPEmail(user.email, user.username, otpCode);
+    showToast('Verification code sent to ' + maskEmail(user.email));
+    
+    // Move to step 2
+    document.getElementById('resetStep1').style.display = 'none';
+    document.getElementById('resetStep2').style.display = '';
+    setTimeout(() => document.getElementById('resetOTP').focus(), 300);
+    
+  } catch (error) {
+    console.error('Error sending reset code:', error);
+    if (errEl) { errEl.textContent = 'Failed to send code. Please try again.'; errEl.classList.add('show'); }
+  }
+}
+
+// Helper functions to mask email/phone for privacy
+function maskEmail(email) {
+  if (!email) return '';
+  const [name, domain] = email.split('@');
+  const maskedName = name.charAt(0) + '***' + name.charAt(name.length - 1);
+  return maskedName + '@' + domain;
+}
+
+function maskPhone(phone) {
+  if (!phone) return '';
+  return '***-***-' + phone.slice(-4);
+}
+
+// Verify OTP and reset password
+async function verifyOTPAndReset() {
+  const otpInput = document.getElementById('resetOTP').value.trim();
+  const newPassword = document.getElementById('resetNewPassword').value;
+  const confirmPassword = document.getElementById('resetConfirmPassword').value;
+  const errEl = document.getElementById('resetError');
+  
+  if (!otpInput) {
+    if (errEl) { errEl.textContent = 'Please enter the verification code'; errEl.classList.add('show'); }
+    return;
+  }
+  
+  if (!newPassword) {
+    if (errEl) { errEl.textContent = 'Please enter a new password'; errEl.classList.add('show'); }
+    return;
+  }
+  
+  if (newPassword.length < 6) {
+    if (errEl) { errEl.textContent = 'Password must be at least 6 characters'; errEl.classList.add('show'); }
+    return;
+  }
+  
+  if (newPassword !== confirmPassword) {
+    if (errEl) { errEl.textContent = 'Passwords do not match'; errEl.classList.add('show'); }
+    return;
+  }
+  
+  if (!resetUserData || otpInput !== resetUserData.otpCode) {
+    if (errEl) { errEl.textContent = 'Invalid verification code'; errEl.classList.add('show'); }
+    return;
+  }
+  
+  try {
+    // Reset password in database
+    const success = await resetUserPassword(resetUserData.id, newPassword);
+    
+    if (success) {
+      showToast('Password reset successfully! Please login with your new password.');
+      resetUserData = null;
+      showAdminView('login');
+    } else {
+      if (errEl) { errEl.textContent = 'Failed to reset password. Please try again.'; errEl.classList.add('show'); }
+    }
+  } catch (error) {
+    console.error('Error resetting password:', error);
+    if (errEl) { errEl.textContent = 'An error occurred. Please try again.'; errEl.classList.add('show'); }
+  }
+}
+
+// Send OTP via EmailJS
+async function sendOTPEmail(email, username, otpCode) {
+  console.log('sendOTPEmail called:', { email, username, otpCode });
+  
+  // Get EmailJS config from localStorage
+  const stored = localStorage.getItem('emailjs_config');
+  if (!stored) {
+    console.error('EmailJS not configured. Please configure in Site Settings.');
+    showToast('EmailJS not configured', true);
+    // For development, show OTP in console
+    console.log('🔐 OTP Code (dev):', otpCode);
+    return;
+  }
+  
+  try {
+    const config = JSON.parse(stored);
+    console.log('EmailJS config loaded:', { serviceId: config.serviceId, templateOTP: config.templateOTP });
+    
+    if (!config.serviceId || !config.templateOTP || !config.publicKey) {
+      console.error('EmailJS configuration incomplete');
+      showToast('EmailJS configuration incomplete', true);
+      console.log('🔐 OTP Code (dev):', otpCode);
+      return;
+    }
+    
+    // Check if EmailJS library is loaded
+    if (typeof emailjs === 'undefined') {
+      console.error('EmailJS library not loaded. Loading now...');
+      
+      // Load EmailJS library
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js';
+      script.onload = async () => {
+        console.log('EmailJS library loaded');
+        emailjs.init(config.publicKey);
+        await sendEmailJSMessage(config, email, username, otpCode);
+      };
+      document.head.appendChild(script);
+      return;
+    }
+    
+    // Initialize EmailJS with public key
+    emailjs.init(config.publicKey);
+    await sendEmailJSMessage(config, email, username, otpCode);
+    
+  } catch (error) {
+    console.error('Error sending OTP email:', error);
+    showToast('Failed to send email', true);
+    console.log('🔐 OTP Code (dev):', otpCode);
+  }
+}
+
+async function sendEmailJSMessage(config, email, username, otpCode) {
+  const templateParams = {
+    to_email: email,
+    to_name: username,
+    user_name: username,
+    otp_code: otpCode,
+    verification_code: otpCode,
+    code: otpCode
+  };
+  
+  console.log('Sending email with params:', templateParams);
+  
+  try {
+    const response = await emailjs.send(config.serviceId, config.templateOTP, templateParams);
+    console.log('Email sent successfully:', response);
+    showToast('Verification code sent to email!');
+  } catch (error) {
+    console.error('EmailJS send error:', error);
+    showToast('Failed to send email: ' + error.text, true);
+    console.log('🔐 OTP Code (dev):', otpCode);
+  }
+}
+
+// Site Configuration
+// USER MANAGEMENT
+// ================================================================
+
+async function renderUsersList() {
+  const list = document.getElementById('usersListContainer');
+  if (!list) return;
+  
+  list.innerHTML = '<div style="text-align:center;padding:1rem;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+  
+  const users = await getAllUsers();
+  const session = getUserSession();
+  
+  list.innerHTML = '';
+  
+  users.forEach(u => {
+    const isCurrentUser = session && session.userId === u.id;
+    const item = document.createElement('div');
+    item.className = 'manage-item';
+    item.innerHTML = `
+      <div class="manage-item-info">
+        <div class="manage-item-title">
+          ${u.username}${isCurrentUser ? ' <span style="color:var(--neon-emerald);font-size:.65rem">(you)</span>' : ''}
+        </div>
+        <div class="manage-item-meta">
+          <span class="manage-item-cat" style="background:${u.role === 'Administrator' ? 'rgba(0,240,255,.08);color:#00f0ff' : 'rgba(139,92,246,.08);color:#8b5cf6'}">${u.role}</span>
+          ${u.phone ? ' · <i class="fas fa-phone" style="font-size:.7rem;opacity:.7"></i> ' + u.phone : ''}
+          · Created ${new Date(u.created_at).toLocaleDateString()}
+        </div>
+      </div>
+      <div class="manage-item-actions">
+        ${isCurrentUser ? '' : `
+          <button class="manage-btn manage-btn-edit" data-id="${u.id}" title="Edit user"><i class="fas fa-edit"></i></button>
+          <button class="manage-btn manage-btn-del" data-id="${u.id}" title="Delete user"><i class="fas fa-trash"></i></button>
+        `}
+      </div>`;
+    list.appendChild(item);
+  });
+  
+  // Attach delete events
+  list.querySelectorAll('.manage-btn-del').forEach(btn => {
+    btn.addEventListener('click', async function() {
+      if (!confirm('Delete this user permanently?')) return;
+      
+      const userId = parseInt(this.dataset.id);
+      const success = await deleteUser(userId);
+      
+      if (success) {
+        showToast('User deleted');
+        renderUsersList();
+      } else {
+        showToast('Failed to delete user', true);
+      }
+    });
+  });
+  
+  // Attach edit events
+  list.querySelectorAll('.manage-btn-edit').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const userId = parseInt(this.dataset.id);
+      const user = users.find(u => u.id === userId);
+      if (user) {
+        editUser(user);
+      }
+    });
+  });
+}
+
+function editUser(user) {
+  // Populate form with user data
+  const usernameInput = document.getElementById('newUserUsername');
+  const emailInput = document.getElementById('newUserEmail');
+  
+  usernameInput.value = user.username;
+  emailInput.value = user.email;
+  document.getElementById('newUserPhone').value = user.phone || '';
+  document.getElementById('newUserRole').value = user.role || 'Editor';
+  document.getElementById('newUserPassword').value = '';
+  document.getElementById('newUserConfirmPassword').value = '';
+  document.getElementById('newUserPassword').placeholder = 'Leave empty to keep current password';
+  
+  // Make username read-only (email can be edited)
+  usernameInput.readOnly = true;
+  usernameInput.style.opacity = '0.6';
+  usernameInput.style.cursor = 'not-allowed';
+  
+  // Change button text and set onclick with proper closure
+  const btn = document.querySelector('#adminUsersView .btn-glow');
+  if (btn) {
+    btn.innerHTML = '<i class="fas fa-save"></i> Update User';
+    // Clone and replace to remove all event listeners
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    // Set new onclick handler
+    document.querySelector('#adminUsersView .btn-glow').onclick = function() { updateUser(user.id); };
+  }
+  
+  showToast('Edit mode: Username and email cannot be changed');
+}
+
+function cancelEdit() {
+  // Clear form
+  const usernameInput = document.getElementById('newUserUsername');
+  const emailInput = document.getElementById('newUserEmail');
+  
+  usernameInput.value = '';
+  emailInput.value = '';
+  document.getElementById('newUserPhone').value = '';
+  document.getElementById('newUserRole').value = 'Editor';
+  document.getElementById('newUserPassword').value = '';
+  document.getElementById('newUserConfirmPassword').value = '';
+  document.getElementById('newUserPassword').placeholder = 'Password (min 6 chars)';
+  
+  // Re-enable username and email fields
+  usernameInput.readOnly = false;
+  emailInput.readOnly = false;
+  usernameInput.style.opacity = '1';
+  emailInput.style.opacity = '1';
+  usernameInput.style.cursor = 'text';
+  emailInput.style.cursor = 'text';
+  
+  // Reset button - use removeAttribute and setAttribute for clean reset
+  const btn = document.querySelector('#adminUsersView .btn-glow');
+  if (btn) {
+    btn.innerHTML = '<i class="fas fa-plus"></i> Create User';
+    // Clone and replace to remove all event listeners
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+    newBtn.onclick = addNewUser;
+  }
+}
+
+async function updateUser(userId) {
+  const username = document.getElementById('newUserUsername').value.trim();
+  const email = document.getElementById('newUserEmail').value.trim();
+  const password = document.getElementById('newUserPassword').value;
+  const confirmPassword = document.getElementById('newUserConfirmPassword').value;
+  const phone = document.getElementById('newUserPhone').value.trim();
+  const role = document.getElementById('newUserRole').value;
+  
+  // Validation
+  if (!username) { showToast('Please enter a username', true); return; }
+  if (username.length < 3) { showToast('Username must be at least 3 characters', true); return; }
+  if (!email) { showToast('Please enter an email address', true); return; }
+  if (!phone) { showToast('Please enter a phone number', true); return; }
+  if (!role) { showToast('Please select a role', true); return; }
+  
+  // Phone validation
+  const phoneRegex = /^\+\d{1,3}\s?\d{10}$/;
+  if (!phoneRegex.test(phone)) {
+    showToast('Invalid phone format. Use: +CountryCode PhoneNumber (e.g., +91 9876543210)', true);
+    return;
+  }
+  
+  // Password validation (only if provided)
+  if (password || confirmPassword) {
+    if (password !== confirmPassword) {
+      showToast('Passwords do not match', true);
+      return;
+    }
+    if (password.length < 6) {
+      showToast('Password must be at least 6 characters', true);
+      return;
+    }
+  }
+  
+  try {
+    const result = await updateExistingUser(userId, username, email, password, role, phone);
+    
+    if (result.success) {
+      showToast(`User "${username}" updated successfully!`);
+      cancelEdit(); // Clear form and reset button
+      await renderUsersList(); // Refresh user list
+    } else {
+      showToast(result.message || 'Failed to update user', true);
+    }
+  } catch (error) {
+    console.error('Error in updateUser:', error);
+    showToast('Failed to update user', true);
+  }
+}
+
+async function addNewUser() {
+  const username = document.getElementById('newUserUsername').value.trim();
+  const email = document.getElementById('newUserEmail').value.trim();
+  const password = document.getElementById('newUserPassword').value;
+  const confirmPassword = document.getElementById('newUserConfirmPassword').value;
+  const phone = document.getElementById('newUserPhone').value.trim();
+  const role = document.getElementById('newUserRole').value;
+  
+  // Validation
+  if (!username) { showToast('Please enter a username', true); return; }
+  if (username.length < 3) { showToast('Username must be at least 3 characters', true); return; }
+  if (!email) { showToast('Please enter an email address', true); return; }
+  if (!password) { showToast('Please enter a password', true); return; }
+  if (password.length < 6) { showToast('Password must be at least 6 characters', true); return; }
+  if (!confirmPassword) { showToast('Please confirm your password', true); return; }
+  if (password !== confirmPassword) { showToast('Passwords do not match', true); return; }
+  if (!phone) { showToast('Please enter a phone number', true); return; }
+  if (!role) { showToast('Please select a role', true); return; }
+  
+  // Phone validation: Must start with + followed by country code and 10 digits
+  const phoneRegex = /^\+\d{1,3}\s?\d{10}$/;
+  if (!phoneRegex.test(phone)) {
+    showToast('Invalid phone format. Use: +CountryCode PhoneNumber (e.g., +91 9876543210)', true);
+    return;
+  }
+  
+  const isAdmin = role === 'Administrator';
+  const result = await createNewUser(username, email, password, role, isAdmin, phone);
+  
+  if (result.success) {
+    showToast(`User "${username}" created successfully!`);
+    document.getElementById('newUserUsername').value = '';
+    document.getElementById('newUserEmail').value = '';
+    document.getElementById('newUserPassword').value = '';
+    document.getElementById('newUserConfirmPassword').value = '';
+    document.getElementById('newUserPhone').value = '';
+    document.getElementById('newUserRole').value = 'Editor';
+    renderUsersList();
+  } else {
+    showToast(result.message || 'Failed to create user', true);
+  }
+}
+
+// ================================================================
+// CMS SETTINGS MODAL
+// ================================================================
+
+function openCMSModal() {
+  // Close admin modal if open
+  closeAdminLogin();
+  
+  const overlay = document.getElementById('cmsModalOverlay');
+  const modal = document.getElementById('cmsModal');
+  if (!overlay || !modal) return;
+  
+  overlay.style.display = 'block';
+  modal.classList.add('show');
+  document.body.style.overflow = 'hidden';
+  
+  // Load configurations
+  loadEmailJSConfig();
+}
+
+function closeCMSModal() {
+  const overlay = document.getElementById('cmsModalOverlay');
+  const modal = document.getElementById('cmsModal');
+  if (!overlay || !modal) return;
+  
+  overlay.style.display = 'none';
+  modal.classList.remove('show');
+  document.body.style.overflow = '';
+}
+
+// CMS Tab Switching
+function switchCMSTab(tabName) {
+  console.log('switchCMSTab called:', tabName);
+  
+  // Update tab buttons
+  document.querySelectorAll('.cms-tab').forEach(tab => tab.classList.remove('active'));
+  event.target.closest('.cms-tab').classList.add('active');
+  
+  // Update tab content - remove active class and clear inline styles
+  document.querySelectorAll('.cms-tab-content').forEach(content => {
+    content.classList.remove('active');
+    content.style.display = ''; // Clear inline style to let CSS take over
+    console.log('Removed active from:', content.id);
+  });
+  
+  // Fix case sensitivity for tab IDs
+  let targetId;
+  if (tabName === 'emailjs') {
+    targetId = 'cmsTabEmailJS'; // Special case: EmailJS has capital JS
+  } else {
+    targetId = `cmsTab${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`;
+  }
+  
+  const targetContent = document.getElementById(targetId);
+  
+  console.log('Looking for tab:', targetId, 'Found:', !!targetContent);
+  
+  if (targetContent) {
+    targetContent.classList.add('active');
+    console.log('Added active to:', targetId);
+    // Don't set inline style - let CSS handle it via .active class
+  }
+  
+  // Load data when specific tabs are opened
+  if (tabName === 'articles') {
+    refreshArticlesList();
+  } else if (tabName === 'categories') {
+    refreshCategoriesList();
+  } else if (tabName === 'emailjs') {
+    setTimeout(() => loadEmailJSConfig(), 100);
+  }
+}
+
+// EmailJS Configuration
+function loadEmailJSConfig() {
+  console.log('loadEmailJSConfig called');
+  const stored = localStorage.getItem('emailjs_config');
+  console.log('Stored EmailJS config:', stored);
+  
+  if (!stored) {
+    console.log('No EmailJS config found in localStorage');
+    return;
+  }
+  
+  try {
+    const config = JSON.parse(stored);
+    console.log('Parsed EmailJS config:', config);
+    
+    const serviceIdEl = document.getElementById('emailjsServiceId');
+    const templateOTPEl = document.getElementById('emailjsTemplateOTP');
+    const templateWelcomeEl = document.getElementById('emailjsTemplateWelcome');
+    const publicKeyEl = document.getElementById('emailjsPublicKey');
+    
+    console.log('Form elements found:', {
+      serviceId: !!serviceIdEl,
+      templateOTP: !!templateOTPEl,
+      templateWelcome: !!templateWelcomeEl,
+      publicKey: !!publicKeyEl
+    });
+    
+    if (serviceIdEl) serviceIdEl.value = config.serviceId || '';
+    if (templateOTPEl) templateOTPEl.value = config.templateOTP || config.templateId || '';
+    if (templateWelcomeEl) templateWelcomeEl.value = config.templateWelcome || '';
+    if (publicKeyEl) publicKeyEl.value = config.publicKey || '';
+    
+    console.log('EmailJS config loaded successfully');
+  } catch (error) {
+    console.error('Error loading EmailJS config:', error);
+  }
+}
+
+function saveEmailJSConfig() {
+  console.log('saveEmailJSConfig called');
+  const serviceIdEl = document.getElementById('emailjsServiceId');
+  const templateOTPEl = document.getElementById('emailjsTemplateOTP');
+  const templateWelcomeEl = document.getElementById('emailjsTemplateWelcome');
+  const publicKeyEl = document.getElementById('emailjsPublicKey');
+  
+  if (!serviceIdEl || !templateOTPEl || !templateWelcomeEl || !publicKeyEl) {
+    console.error('Form elements not found');
+    showToast('Form elements not found', true);
+    return;
+  }
+  
+  const config = {
+    serviceId: serviceIdEl.value.trim(),
+    templateOTP: templateOTPEl.value.trim(),
+    templateWelcome: templateWelcomeEl.value.trim(),
+    publicKey: publicKeyEl.value.trim()
+  };
+  
+  console.log('EmailJS config:', config);
+  
+  if (!config.serviceId || !config.publicKey) {
+    showToast('Service ID and Public Key are required', true);
+    return;
+  }
+  
+  if (!config.templateOTP && !config.templateWelcome) {
+    showToast('Please configure at least one template', true);
+    return;
+  }
+  
+  localStorage.setItem('emailjs_config', JSON.stringify(config));
+  console.log('EmailJS config saved to localStorage');
+  showToast('EmailJS configuration saved! ✅');
+}
+
+function testEmailJS() {
+  const stored = localStorage.getItem('emailjs_config');
+  if (!stored) {
+    showToast('Please configure EmailJS first', true);
+    return;
+  }
+  
+  try {
+    const config = JSON.parse(stored);
+    if (!config.serviceId || !config.publicKey) {
+      showToast('EmailJS configuration is incomplete', true);
+      return;
+    }
+    
+    if (!config.templateOTP && !config.templateWelcome) {
+      showToast('Please configure at least one template', true);
+      return;
+    }
+    
+    // Test email functionality would go here
+    // For now, just show success message
+    let message = 'EmailJS config is valid.\n';
+    if (config.templateOTP) message += '✓ OTP template configured\n';
+    if (config.templateWelcome) message += '✓ Welcome template configured';
+    
+    showToast(message, false, 4000);
+  } catch (error) {
+    showToast('Invalid EmailJS configuration', true);
+  }
+}
+
+// Site Configuration
+function saveSiteConfig() {
+  const config = {
+    title: document.getElementById('siteTitle').value,
+    description: document.getElementById('siteDescription').value,
+    storageAccount: document.getElementById('azureStorageAccount').value,
+    imagesContainer: document.getElementById('azureImagesContainer').value
+  };
+  
+  localStorage.setItem('site_config', JSON.stringify(config));
+  alert('Site configuration saved!');
+}
+
+// ================================================================
+// ARTICLE MANAGEMENT
+// ================================================================
+
+async function refreshArticlesList() {
+  const container = document.getElementById('articlesListContainer');
+  if (!container) return;
+  
+  container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading articles...</div>';
+  
+  try {
+    const articles = await getArticles();
+    
+    if (!articles || articles.length === 0) {
+      container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-muted)"><i class="fas fa-inbox" style="font-size:2rem;margin-bottom:1rem;display:block;opacity:0.5"></i>No articles found</div>';
+      return;
+    }
+    
+    container.innerHTML = '';
+    
+    articles.forEach(article => {
+      const item = document.createElement('div');
+      item.className = 'manage-item';
+      item.style.marginBottom = '0.75rem';
+      
+      const categoryColors = {
+        Cloud: '#00f0ff',
+        DevOps: '#8b5cf6',
+        Kubernetes: '#38bdf8',
+        Networking: '#f59e0b',
+        Linux: '#10b981',
+        IaC: '#f43f5e'
+      };
+      
+      const color = categoryColors[article.category] || '#00f0ff';
+      
+      item.innerHTML = `
+        <div class="manage-item-info">
+          <div class="manage-item-title">${article.title}</div>
+          <div class="manage-item-meta">
+            <span class="manage-item-cat" style="background:${color}15;color:${color}">${article.category}</span>
+            · ${article.date_published || article.date || 'No date'}
+            · ${article.read_time || '5 min read'}
+            ${article.tags && article.tags.length > 0 ? ' · ' + article.tags.slice(0, 3).join(', ') : ''}
+          </div>
+        </div>
+        <div class="manage-item-actions">
+          <button class="manage-btn manage-btn-view" data-article-id="${article.id}" title="View article">
+            <i class="fas fa-eye"></i>
+          </button>
+          <button class="manage-btn manage-btn-edit" data-article-id="${article.id}" title="Edit article">
+            <i class="fas fa-edit"></i>
+          </button>
+          <button class="manage-btn manage-btn-del" data-article-id="${article.id}" data-article-title="${article.title}" title="Delete article">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      `;
+      
+      container.appendChild(item);
+    });
+    
+    // Attach event listeners after adding to DOM
+    container.querySelectorAll('.manage-btn-view').forEach(btn => {
+      btn.addEventListener('click', function() {
+        viewArticle(this.dataset.articleId);
+      });
+    });
+    
+    container.querySelectorAll('.manage-btn-edit').forEach(btn => {
+      btn.addEventListener('click', function() {
+        editArticle(this.dataset.articleId);
+      });
+    });
+    
+    container.querySelectorAll('.manage-btn-del').forEach(btn => {
+      btn.addEventListener('click', function() {
+        deleteArticleConfirm(this.dataset.articleId, this.dataset.articleTitle);
+      });
+    });
+    
+  } catch (error) {
+    console.error('Error loading articles:', error);
+    container.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--neon-rose)"><i class="fas fa-exclamation-triangle"></i> Failed to load articles</div>';
+  }
+}
+
+function viewArticle(articleId) {
+  // Open article in new tab
+  const isSubPage = window.location.pathname.includes('pages/');
+  const url = isSubPage ? `article.html?id=${articleId}` : `pages/article.html?id=${articleId}`;
+  window.open(url, '_blank');
+}
+
+async function editArticle(articleId) {
+  try {
+    // Load the article
+    const articles = await getArticles();
+    const article = articles.find(a => a.id === articleId);
+    
+    if (!article) {
+      showToast('Article not found', true);
+      return;
+    }
+    
+    // Close CMS modal
+    closeCMSModal();
+    
+    // Open editor
+    openEditor();
+    
+    // Populate form
+    document.getElementById('artTitle').value = article.title;
+    document.getElementById('artDesc').value = article.description || article.desc || '';
+    document.getElementById('artCategory').value = article.category;
+    document.getElementById('artContent').value = article.content;
+    
+    // Set tags
+    currentTags = article.tags || [];
+    renderTags();
+    
+    // Store original ID for update
+    window.editingArticleId = articleId;
+    
+    showToast('Editing article: ' + article.title);
+    
+  } catch (error) {
+    console.error('Error loading article for edit:', error);
+    showToast('Failed to load article', true);
+  }
+}
+
+async function deleteArticleConfirm(articleId, articleTitle) {
+  if (!confirm(`Delete article "${articleTitle}"?\n\nThis action cannot be undone.`)) {
+    return;
+  }
+  
+  try {
+    await deleteArticle(articleId);
+    showToast('Article deleted successfully');
+    refreshArticlesList();
+    
+    // Refresh home page if open
+    const postsGrid = document.getElementById('postsGrid');
+    if (postsGrid) {
+      if (window.location.pathname.includes('pages/')) await renderPostsSub('postsGrid');
+      else await renderPosts('postsGrid');
+    }
+  } catch (error) {
+    console.error('Error deleting article:', error);
+    showToast('Failed to delete article', true);
+  }
+}
+
+// ================================================================
+// CATEGORY MANAGEMENT
+// ================================================================
+
+// Default categories
+const defaultCategories = [
+  { 
+    id: 'cloud', 
+    name: 'Cloud', 
+    icon: '☁️', 
+    description: 'Cloud computing and services',
+    color: 'var(--neon-cyan)',
+    tags: ['AWS', 'Azure', 'GCP', 'Multi-Cloud']
+  },
+  { 
+    id: 'devops', 
+    name: 'DevOps', 
+    icon: '♾️', 
+    description: 'DevOps & CI/CD practices',
+    color: 'var(--neon-violet)',
+    tags: ['Jenkins', 'GitHub Actions', 'ArgoCD', 'GitOps']
+  },
+  { 
+    id: 'kubernetes', 
+    name: 'Kubernetes', 
+    icon: '☸', 
+    description: 'Container orchestration',
+    color: 'var(--neon-sky)',
+    tags: ['Docker', 'K8s', 'Helm', 'Istio']
+  },
+  { 
+    id: 'networking', 
+    name: 'Networking', 
+    icon: '🔒', 
+    description: 'Networking & Security',
+    color: 'var(--neon-amber)',
+    tags: ['VPC', 'Zero Trust', 'IAM', 'SSL/TLS']
+  },
+  { 
+    id: 'linux', 
+    name: 'Linux', 
+    icon: '🐧', 
+    description: 'Linux / Windows systems',
+    color: 'var(--neon-emerald)',
+    tags: ['Linux', 'Bash', 'PowerShell', 'Windows Server']
+  },
+  { 
+    id: 'iac', 
+    name: 'IaC', 
+    icon: '📦', 
+    description: 'Infrastructure as Code',
+    color: 'var(--neon-rose)',
+    tags: ['Terraform', 'Pulumi', 'Ansible', 'CloudFormation']
+  }
+];
+
+function getCategories() {
+  const stored = localStorage.getItem('site_categories');
+  return stored ? JSON.parse(stored) : defaultCategories;
+}
+
+function saveCategories(categories) {
+  localStorage.setItem('site_categories', JSON.stringify(categories));
+}
+
+async function refreshCategoriesList() {
+  const container = document.getElementById('categoriesListContainer');
+  if (!container) return;
+  
+  const categories = getCategories();
+  
+  if (categories.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:3rem;color:var(--text-muted)">
+        <i class="fas fa-tags" style="font-size:3rem;margin-bottom:1rem;opacity:.3"></i>
+        <p>No categories yet. Click "Add Category" to create one.</p>
+      </div>
+    `;
+    return;
+  }
+  
+  let html = '<div style="display:grid;gap:12px">';
+  categories.forEach(cat => {
+    html += `
+      <div class="category-item" style="background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:8px;padding:16px;display:flex;align-items:center;gap:16px">
+        <div style="font-size:2rem;width:50px;height:50px;display:flex;align-items:center;justify-content:center;background:var(--bg-void);border-radius:8px">${cat.icon}</div>
+        <div style="flex:1">
+          <div style="font-size:1rem;font-weight:600;color:var(--text-white);margin-bottom:4px">${cat.name}</div>
+          <div style="font-size:.85rem;color:var(--text-muted)">${cat.description}</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="cms-btn cms-btn-secondary" onclick="editCategory('${cat.id}')" style="padding:8px 12px">
+            <i class="fas fa-edit"></i> Edit
+          </button>
+          <button class="cms-btn cms-btn-danger" onclick="deleteCategory('${cat.id}')" style="padding:8px 12px">
+            <i class="fas fa-trash"></i> Delete
+          </button>
+        </div>
+      </div>
+    `;
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function openAddCategoryModal() {
+  const name = prompt('Category Name (e.g., Cloud, DevOps):');
+  if (!name || !name.trim()) return;
+  
+  const icon = prompt('Category Icon (emoji, e.g., ☁️, 🚀):');
+  if (!icon || !icon.trim()) return;
+  
+  const description = prompt('Category Description:');
+  if (!description || !description.trim()) return;
+  
+  const categories = getCategories();
+  const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  
+  // Check if ID already exists
+  if (categories.find(c => c.id === id)) {
+    showToast('Category with this name already exists', true);
+    return;
+  }
+  
+  // Assign a color (cycle through available colors)
+  const colors = ['var(--neon-cyan)', 'var(--neon-violet)', 'var(--neon-sky)', 'var(--neon-amber)', 'var(--neon-emerald)', 'var(--neon-rose)'];
+  const color = colors[categories.length % colors.length];
+  
+  categories.push({ 
+    id, 
+    name: name.trim(), 
+    icon: icon.trim(), 
+    description: description.trim(),
+    color: color,
+    tags: []
+  });
+  saveCategories(categories);
+  refreshCategoriesList();
+  updateCategoryDropdowns();
+  renderTopicCards();
+  renderBlogFilters();
+  showToast('Category added successfully! ✅');
+}
+
+function editCategory(categoryId) {
+  const categories = getCategories();
+  const category = categories.find(c => c.id === categoryId);
+  if (!category) return;
+  
+  const name = prompt('Category Name:', category.name);
+  if (!name || !name.trim()) return;
+  
+  const icon = prompt('Category Icon (emoji):', category.icon);
+  if (!icon || !icon.trim()) return;
+  
+  const description = prompt('Category Description:', category.description);
+  if (!description || !description.trim()) return;
+  
+  category.name = name.trim();
+  category.icon = icon.trim();
+  category.description = description.trim();
+  
+  saveCategories(categories);
+  refreshCategoriesList();
+  updateCategoryDropdowns();
+  renderTopicCards();
+  renderBlogFilters();
+  showToast('Category updated successfully! ✅');
+}
+
+function deleteCategory(categoryId) {
+  if (!confirm('Delete this category?\n\nArticles using this category will not be affected.')) {
+    return;
+  }
+  
+  let categories = getCategories();
+  categories = categories.filter(c => c.id !== categoryId);
+  saveCategories(categories);
+  refreshCategoriesList();
+  updateCategoryDropdowns();
+  renderTopicCards();
+  renderBlogFilters();
+  showToast('Category deleted successfully');
+}
+
+function updateCategoryDropdowns() {
+  const categories = getCategories();
+  const dropdown = document.getElementById('artCategory');
+  if (!dropdown) return;
+  
+  dropdown.innerHTML = '';
+  categories.forEach(cat => {
+    const option = document.createElement('option');
+    option.value = cat.name;
+    option.textContent = `${cat.icon} ${cat.name}`;
+    dropdown.appendChild(option);
+  });
+}
+
+function renderTopicCards() {
+  const container = document.getElementById('topicsWrap');
+  if (!container) return;
+  
+  const categories = getCategories();
+  const colors = ['var(--neon-cyan)', 'var(--neon-violet)', 'var(--neon-sky)', 'var(--neon-amber)', 'var(--neon-emerald)', 'var(--neon-rose)'];
+  
+  container.innerHTML = '';
+  categories.forEach((cat, index) => {
+    const color = cat.color || colors[index % colors.length];
+    const tags = cat.tags || [];
+    
+    const card = document.createElement('div');
+    card.className = 'tcard reveal';
+    card.style.setProperty('--c', color);
+    card.onclick = () => window.location.href = `pages/blog.html?category=${cat.name}`;
+    
+    let tagsHtml = '';
+    if (tags.length > 0) {
+      tagsHtml = '<div class="tcard-tags">' + tags.map(tag => `<span>${tag}</span>`).join('') + '</div>';
+    }
+    
+    card.innerHTML = `
+      <div class="tcard-icon">${cat.icon}</div>
+      <h3>${cat.name}</h3>
+      <p>${cat.description}</p>
+      ${tagsHtml}
+    `;
+    
+    container.appendChild(card);
+  });
+  
+  // Re-initialize reveal animations
+  if (typeof initReveals === 'function') {
+    initReveals();
+  }
+}
+
+function renderBlogFilters() {
+  const container = document.getElementById('filterBtns');
+  if (!container) return;
+  
+  const categories = getCategories();
+  
+  // Keep "All" button
+  let html = '<button class="filter-btn active" data-cat="all">All Topics</button>';
+  
+  // Add category buttons
+  categories.forEach(cat => {
+    html += `<button class="filter-btn" data-cat="${cat.name}">${cat.icon} ${cat.name}</button>`;
+  });
+  
+  container.innerHTML = html;
+  
+  // Re-attach event listeners
+  container.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      container.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      const cat = this.getAttribute('data-cat');
+      if (typeof filterPosts === 'function') {
+        filterPosts(cat);
+      }
+    });
+  });
+}
+
+// ================================================================
+// UPDATE ADMIN ACTIVATION TO SHOW USERS BUTTON
+// ================================================================
+
+// Update checkUserSession to show Users button for Administrators
+function checkUserSession() {
+  currentUser = getUserSession();
+  if (currentUser) {
+    isAdmin = currentUser.is_admin;
+    document.body.classList.add('admin-mode');
+    const badge = document.getElementById('adminBadge');
+
+    if (badge) {
+      badge.classList.add('show');
+      badge.innerHTML = `<i class="fas fa-shield"></i> ${currentUser.username}`;
+      badge.title = `Role: ${currentUser.role}`;
+    }
+    const lock = document.getElementById('adminLock');
+    if (lock) { 
+      lock.classList.add('unlocked'); 
+      lock.innerHTML = '<i class="fas fa-lock-open"></i>'; 
+      lock.title = 'Logout'; 
+    }
+    
+    // Add role-specific class
+    if (currentUser.is_admin === true || currentUser.is_admin === 1) {
+      document.body.classList.add('administrator-mode');
+    } else {
+      document.body.classList.add('editor-mode');
+      document.body.classList.remove('administrator-mode');
+    }
+  }
+}

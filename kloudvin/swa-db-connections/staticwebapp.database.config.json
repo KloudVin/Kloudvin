@@ -22,7 +22,8 @@
       },
       "authentication": {
         "provider": "StaticWebApps"
-      }
+      },
+      "mode": "development"
     }
   },
   "entities": {
@@ -33,22 +34,21 @@
           "role": "anonymous",
           "actions": [
             {
-              "action": "read",
+              "action": "create",
               "fields": {
-                "include": ["id", "username", "email", "created_at"]
+                "include": ["username", "email", "password_hash", "role", "is_admin", "phone"]
               }
             },
             {
-              "action": "create",
-              "fields": {
-                "include": ["username", "email", "password_hash"]
-              }
+              "action": "read"
+            },
+            {
+              "action": "update"
+            },
+            {
+              "action": "delete"
             }
           ]
-        },
-        {
-          "role": "authenticated",
-          "actions": ["*"]
         }
       ]
     },
@@ -58,14 +58,11 @@
         {
           "role": "anonymous",
           "actions": [
-            {
-              "action": "read"
-            }
+            "create",
+            "read", 
+            "update",
+            "delete"
           ]
-        },
-        {
-          "role": "authenticated",
-          "actions": ["*"]
         }
       ]
     }

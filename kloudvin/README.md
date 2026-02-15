@@ -1,301 +1,398 @@
 # KloudVin - Cloud & DevOps Blog Platform
 
-A modern, neon-themed technical blog platform built with vanilla JavaScript and Azure Static Web Apps, featuring persistent data storage with Azure SQL Database.
+A modern, feature-rich blog platform for technical articles on Cloud Architecture, DevOps, Kubernetes, and IT infrastructure.
+
+---
 
 ## Features
 
-- 🎨 Modern neon-themed UI with ambient effects
-- 📝 Rich markdown editor with file upload support
-- 🔐 Admin authentication system
-- 💾 Persistent data storage with Azure SQL Database
-- 🚀 Deployed on Azure Static Web Apps
-- 📱 Fully responsive design
-- ⚡ Fast and lightweight (no framework dependencies)
+### Content Management
+- ✅ Markdown-based article editor with live preview
+- ✅ DOCX to Markdown conversion with automatic image extraction
+- ✅ Image upload to Azure Blob Storage
+- ✅ Category management system
+- ✅ Article CRUD operations (Create, Read, Update, Delete)
+- ✅ Rich text formatting with syntax highlighting
 
-## Tech Stack
+### User Management
+- ✅ Two-tier role system (Administrator & Editor)
+- ✅ Secure authentication
+- ✅ Email-based password reset with OTP
+- ✅ User profile management
 
-- **Frontend**: Vanilla JavaScript, HTML5, CSS3
-- **Backend**: Azure Static Web Apps Database Connections (Data API Builder)
-- **Database**: Azure SQL Database
-- **Deployment**: Azure Static Web Apps
-- **CI/CD**: Azure Pipelines / GitHub Actions
+### Technical Stack
+- **Frontend:** HTML5, CSS3, JavaScript (Vanilla)
+- **Backend:** Azure Static Web Apps with Data API Builder
+- **Database:** Azure SQL Database
+- **Storage:** Azure Blob Storage
+- **Functions:** Azure Functions (Node.js)
+- **Email:** EmailJS
+
+---
 
 ## Project Structure
 
 ```
 kloudvin/
-├── css/
-│   └── style.css              # Main stylesheet
-├── js/
-│   ├── app.js                 # Core application logic
-│   ├── components.js          # Reusable UI components
-│   └── db.js                  # Database API wrapper
+├── index.html                          # Homepage
 ├── pages/
-│   ├── about.html             # About page
-│   ├── article.html           # Article detail page
-│   └── blog.html              # Blog listing page
+│   ├── blog.html                       # Blog listing page
+│   ├── article.html                    # Article detail page
+│   └── about.html                      # About page
+├── css/
+│   └── style.css                       # Main stylesheet
+├── js/
+│   ├── app.js                          # Main application logic
+│   ├── components.js                   # Reusable UI components
+│   ├── db.js                           # Database operations
+│   ├── migrate.js                      # Database migrations
+│   └── user-management-new.js          # User management
 ├── swa-db-connections/
 │   ├── staticwebapp.database.config.json  # Data API configuration
-│   └── schema.sql             # Database schema
-├── index.html                 # Homepage
-├── staticwebapp.config.json   # SWA configuration
-├── azure-pipelines.yml        # CI/CD pipeline
-├── .env.example               # Environment variables template
-├── DATABASE-SETUP.md          # Database setup guide
-└── README.md                  # This file
+│   ├── schema.sql                      # Database schema
+│   └── migration-*.sql                 # Migration scripts
+├── staticwebapp.config.json            # Static Web App configuration
+├── package.json                        # Node.js dependencies
+├── ARTICLE-CREATION-GUIDE.md           # User guide for creating articles
+├── DEPLOYMENT-GUIDE.md                 # Deployment instructions
+├── DATABASE-SETUP.md                   # Database setup guide
+└── DEPLOYMENT-CHECKLIST.md             # Pre-deployment checklist
 ```
 
-## Getting Started
+---
 
-### 📚 Documentation Hub
+## Quick Start
 
-**New to this project?** Start here: [DOCUMENTATION-INDEX.md](./DOCUMENTATION-INDEX.md) - Find the right guide for your needs
+### For Users (Creating Articles)
 
-### Quick Links by Experience Level
+1. **Login:**
+   - Click login button
+   - Enter credentials
+   - Access granted based on role
 
-**🆕 Beginner (New to Azure/Cloud)**
-1. [WHERE-DOES-IT-RUN.md](./WHERE-DOES-IT-RUN.md) - Understand the architecture
-2. [SETUP-EXPLAINED.md](./SETUP-EXPLAINED.md) - Detailed workflow
-3. [QUICK-START.md](./QUICK-START.md) - Step-by-step setup
+2. **Create Article:**
+   - Click "New Article" button
+   - Choose Write mode (Markdown) or Upload mode (DOCX)
+   - Fill in title, description, category
+   - Write/upload content
+   - Add images if needed
+   - Preview and publish
 
-**⚡ Intermediate (Know Azure basics)**
-1. [QUICK-START.md](./QUICK-START.md) - Fast setup
-2. [DATABASE-SETUP.md](./DATABASE-SETUP.md) - Database details
-3. [SWA-CLI-GUIDE.md](./SWA-CLI-GUIDE.md) - CLI reference
+3. **Need Help?**
+   - Click "Help" button in article editor
+   - Read [ARTICLE-CREATION-GUIDE.md](ARTICLE-CREATION-GUIDE.md)
 
-**🚀 Advanced (Experienced developer)**
-1. [MIGRATION-SUMMARY.md](./MIGRATION-SUMMARY.md) - What changed
-2. Review code in `js/db.js` and `js/app.js`
-3. Run `npm start` and deploy
+### For Administrators
 
-### Prerequisites
+1. **Manage Users:**
+   - Click "Users" button
+   - Add/edit/delete users
+   - Assign roles (Administrator/Editor)
 
-- Node.js 16+ (for SWA CLI)
-- Azure subscription
-- Azure CLI
-- Git
+2. **Site Settings:**
+   - Click gear icon (⚙️)
+   - Configure EmailJS
+   - Manage categories
+   - View/edit/delete articles
+
+3. **Configure Services:**
+   - EmailJS: For password reset emails
+   - Azure Storage: For image uploads
+   - Azure Functions: For DOCX conversion
+
+---
+
+## Documentation
+
+### User Guides
+- **[Article Creation Guide](ARTICLE-CREATION-GUIDE.md)** - Complete guide for creating and publishing articles
+  - Write mode (Markdown)
+  - Upload mode (DOCX)
+  - Image management
+  - Markdown formatting reference
+
+### Technical Documentation
+- **[Deployment Guide](DEPLOYMENT-GUIDE.md)** - Complete Azure deployment instructions
+  - Pre-deployment checklist
+  - Step-by-step deployment
+  - Configuration guide
+  - Troubleshooting
+
+- **[Database Setup](DATABASE-SETUP.md)** - Database schema and setup
+  - Table structures
+  - Relationships
+  - Migration scripts
+
+- **[Deployment Checklist](DEPLOYMENT-CHECKLIST.md)** - Pre-deployment verification
+  - Required resources
+  - Configuration items
+  - Testing checklist
+
+---
+
+## Azure Resources
+
+### Required Services
+
+1. **Azure Static Web App**
+   - Hosts the website
+   - Provides Data API Builder for REST endpoints
+   - Free tier available
+
+2. **Azure SQL Database**
+   - Server: `kloudvin-server.database.windows.net`
+   - Database: `kloudvin`
+   - Tables: Users, Articles
+
+3. **Azure Storage Account**
+   - Account: `kloudvin`
+   - Container: `images` (public blob access)
+   - Stores uploaded images
+
+4. **Azure Function App**
+   - Name: `kloudvin-functions-geftgkb3dehxhag7`
+   - Functions:
+     - `uploadImage` - Upload images to blob storage
+     - `convertDocx` - Convert DOCX to Markdown
+
+### External Services
+
+1. **EmailJS**
+   - Service for sending emails
+   - Used for password reset OTP
+   - Free tier: 200 emails/month
+
+---
+
+## Configuration
+
+### EmailJS Setup
+
+1. Create account at [emailjs.com](https://www.emailjs.com/)
+2. Create email service
+3. Create two templates:
+   - Password Reset OTP
+   - Welcome & Notifications
+4. Configure in Site Settings → EmailJS tab
+
+### Database Connection
+
+Connection string format:
+```
+Server=tcp:kloudvin-server.database.windows.net,1433;
+Initial Catalog=kloudvin;
+Persist Security Info=False;
+User ID=your-username;
+Password=your-password;
+MultipleActiveResultSets=False;
+Encrypt=True;
+TrustServerCertificate=False;
+Connection Timeout=30;
+```
+
+### Storage Account
+
+- Connection string in Azure Portal → Storage Account → Access keys
+- Configure CORS for your domain
+- Set container access level to "Blob (anonymous read access for blobs only)"
+
+---
+
+## Development
 
 ### Local Development
 
-1. **Clone the repository**
+1. **Install Dependencies:**
    ```bash
-   git clone https://github.com/YOUR_USERNAME/kloudvin.git
    cd kloudvin
+   npm install
    ```
 
-2. **Install SWA CLI**
+2. **Configure Environment:**
+   - Copy `.env.example` to `.env`
+   - Fill in connection strings and API keys
+
+3. **Run Locally:**
    ```bash
+   # Using Azure Static Web Apps CLI
    npm install -g @azure/static-web-apps-cli
+   swa start
    ```
 
-3. **Set up Azure SQL Database**
-   
-   Follow the detailed guide in [DATABASE-SETUP.md](./DATABASE-SETUP.md)
+4. **Access:**
+   - Open http://localhost:4280
 
-4. **Configure environment variables**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your Azure SQL connection string
-   ```
+### Testing
 
-5. **Start the development server**
-   ```bash
-   swa start . --data-api-location swa-db-connections
-   ```
+1. **Test Database Connection:**
+   - Check Data API endpoints: `/data-api/rest/User`, `/data-api/rest/Article`
 
-6. **Open your browser**
-   ```
-   http://localhost:4280
-   ```
+2. **Test Image Upload:**
+   - Login as admin/editor
+   - Create new article
+   - Upload image
+   - Verify image appears in Azure Blob Storage
 
-### Default Admin Credentials
+3. **Test DOCX Conversion:**
+   - Upload a .docx file
+   - Verify conversion to Markdown
+   - Check images are extracted
 
-- **Username**: `admin`
-- **Password**: `kloudvin@2026`
-
-⚠️ **Important**: Change these credentials in production!
-
-## Database Setup
-
-The application uses Azure SQL Database for persistent storage. See [DATABASE-SETUP.md](./DATABASE-SETUP.md) for detailed setup instructions.
-
-### Quick Setup
-
-1. Create Azure SQL Database
-2. Run the schema from `swa-db-connections/schema.sql`
-3. Configure connection string in `.env`
-4. Start the app with SWA CLI
-
-### Database Schema
-
-**Users Table**
-- `id` (INT, Primary Key)
-- `username` (NVARCHAR(50), Unique)
-- `email` (NVARCHAR(100), Unique)
-- `password_hash` (NVARCHAR(255))
-- `created_at` (DATETIME2)
-- `last_login` (DATETIME2)
-- `is_admin` (BIT)
-
-**Articles Table**
-- `id` (NVARCHAR(255), Primary Key)
-- `title` (NVARCHAR(500))
-- `description` (NVARCHAR(1000))
-- `content` (NVARCHAR(MAX))
-- `category` (NVARCHAR(50))
-- `read_time` (NVARCHAR(20))
-- `tags` (NVARCHAR(500))
-- `date_published` (NVARCHAR(50))
-- `created_at` (DATETIME2)
-- `updated_at` (DATETIME2)
-- `author_id` (INT, Foreign Key)
+---
 
 ## Deployment
 
-### Deploy to Azure Static Web Apps
+### Prerequisites
 
-1. **Create a Static Web App**
-   ```bash
-   az staticwebapp create \
-     --name kloudvin \
-     --resource-group YOUR_RESOURCE_GROUP \
-     --source https://github.com/YOUR_USERNAME/kloudvin \
-     --location eastus \
-     --branch main \
-     --app-location "/" \
-     --output-location "."
-   ```
-
-2. **Configure Database Connection**
-   - Add `DATABASE_CONNECTION_STRING` to Application Settings
-   - Link Azure SQL Database in the portal
-
-3. **Deploy**
-   ```bash
-   git push origin main
-   ```
-
-### CI/CD Pipeline
-
-The project includes an Azure Pipelines configuration (`azure-pipelines.yml`). Configure it with:
 - Azure subscription
-- Static Web App deployment token
-- Database connection string (as secret variable)
+- GitHub account (for CI/CD)
+- Azure CLI (optional)
 
-## API Endpoints
+### Deployment Steps
 
-The Data API Builder exposes REST endpoints:
+1. **Read the Deployment Guide:**
+   - See [DEPLOYMENT-GUIDE.md](DEPLOYMENT-GUIDE.md) for complete instructions
 
-- `GET /.data-api/rest/User` - List users
-- `GET /.data-api/rest/User?$filter=username eq 'admin'` - Get user by username
-- `POST /.data-api/rest/User` - Create user
-- `PATCH /.data-api/rest/User/id/{id}` - Update user
-- `GET /.data-api/rest/Article` - List articles
-- `GET /.data-api/rest/Article/id/{id}` - Get article by ID
-- `POST /.data-api/rest/Article` - Create article
-- `PATCH /.data-api/rest/Article/id/{id}` - Update article
-- `DELETE /.data-api/rest/Article/id/{id}` - Delete article
+2. **Prepare Code:**
+   - Update configuration files
+   - Remove sensitive data
+   - Test locally
 
-## Features in Detail
+3. **Deploy to Azure:**
+   - Create Static Web App
+   - Configure database connection
+   - Deploy Azure Functions
+   - Configure custom domain (optional)
 
-### Admin System
-- Secure login with database authentication
-- Session management with sessionStorage
-- Admin-only article creation and management
+4. **Post-Deployment:**
+   - Create admin user
+   - Configure EmailJS
+   - Test all functionality
+   - Set up monitoring
 
-### Article Editor
-- **Write Mode**: Rich markdown editor with toolbar
-- **Upload Mode**: Support for .md, .txt, .html, .docx files
-- Auto-extraction of title and description
-- Tag management
-- Live preview
+---
 
-### Article Management
-- Category-based organization
-- Tag filtering
-- Search functionality (coming soon)
-- Reading time estimation
+## Security
 
-## Security Considerations
+### Best Practices
 
-⚠️ **Current Implementation**: Passwords are stored in plain text for development purposes.
+1. **Authentication:**
+   - Strong passwords required
+   - Password reset via email OTP
+   - Session management
 
-### For Production:
+2. **Database:**
+   - Firewall rules configured
+   - Encrypted connections
+   - Regular backups
 
-1. **Implement Password Hashing**
-   ```javascript
-   // Use bcrypt or similar
-   const bcrypt = require('bcryptjs');
-   const hashedPassword = await bcrypt.hash(password, 10);
-   ```
+3. **Storage:**
+   - Public read access for images only
+   - SAS tokens for sensitive operations
+   - Soft delete enabled
 
-2. **Use Azure Key Vault** for connection strings
+4. **Application:**
+   - HTTPS only
+   - Content Security Policy configured
+   - Input validation
+   - XSS protection
 
-3. **Enable Azure AD Authentication** for database access
+---
 
-4. **Implement HTTPS** (automatic with Azure Static Web Apps)
+## Maintenance
 
-5. **Add CSRF Protection** for state-changing operations
+### Regular Tasks
 
-6. **Rate Limiting** on authentication endpoints
+**Weekly:**
+- Check error logs
+- Monitor performance
+- Review security alerts
 
-## Browser Support
+**Monthly:**
+- Database optimization
+- Clean up old images
+- Update dependencies
+- Review backups
 
-- Chrome 90+
-- Firefox 88+
-- Safari 14+
-- Edge 90+
+**Quarterly:**
+- Security audit
+- Performance optimization
+- Cost review
+- Documentation updates
 
-## Performance
+---
 
-- Lazy loading for images
-- Intersection Observer for scroll animations
-- Minimal JavaScript bundle (no frameworks)
-- CSS Grid and Flexbox for layouts
-- Optimized for Core Web Vitals
+## Troubleshooting
+
+### Common Issues
+
+**Database Connection Errors:**
+- Check firewall rules
+- Verify connection string
+- Ensure database is online
+
+**Image Upload Failures:**
+- Check Function App status
+- Verify CORS settings
+- Check storage connection string
+
+**DOCX Conversion Issues:**
+- Verify file size < 10MB
+- Ensure .docx format
+- Check Function App logs
+
+**Login Problems:**
+- Verify user exists
+- Check password
+- Clear browser cache
+
+### Getting Help
+
+- Check documentation in this repository
+- Review Azure Portal logs
+- Check browser console (F12)
+- Contact administrator
+
+---
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+### Code Style
 
-## Roadmap
+- Use consistent indentation (2 spaces)
+- Comment complex logic
+- Follow existing patterns
+- Test before committing
 
-- [ ] User registration functionality
-- [ ] Password reset flow
-- [ ] Article editing and deletion
-- [ ] Comment system
-- [ ] Search functionality
-- [ ] RSS feed
-- [ ] Dark/light theme toggle
-- [ ] Analytics dashboard
-- [ ] Email notifications
-- [ ] Social sharing
+### Git Workflow
+
+1. Create feature branch
+2. Make changes
+3. Test thoroughly
+4. Commit with clear message
+5. Push to GitHub
+6. GitHub Actions deploys automatically
+
+---
 
 ## License
 
-This project is licensed under the MIT License.
+Copyright © 2026 KloudVin. All rights reserved.
 
-## Author
-
-**Vinod H**
-- Cloud / DevOps Platform Architect
-- 22+ years in IT
-- Specializing in Azure, Kubernetes, and Infrastructure as Code
+---
 
 ## Support
 
-For issues, questions, or contributions:
-- Open an issue on GitHub
-- Check [DATABASE-SETUP.md](./DATABASE-SETUP.md) for setup help
-- Review Azure Static Web Apps documentation
+**Documentation:**
+- [Article Creation Guide](ARTICLE-CREATION-GUIDE.md)
+- [Deployment Guide](DEPLOYMENT-GUIDE.md)
+- [Database Setup](DATABASE-SETUP.md)
 
-## Acknowledgments
+**Contact:**
+- Email: admin@kloudvin.com
+- Website: https://kloudvin.com
 
-- Font Awesome for icons
-- Google Fonts (Sora, DM Sans, Fira Code)
-- Azure Static Web Apps team
-- Data API Builder project
+---
+
+**Last Updated:** February 2026  
+**Version:** 1.0

@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Cleanup Tool - KloudVin</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      padding: 2rem;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .subtitle {
+      color: #666;
+      margin-bottom: 2rem;
+      font-size: 0.9rem;
+    }
+    .section {
+      margin-bottom: 2rem;
+      padding: 1.5rem;
+      background: #f8f9fa;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+    }
+    .section h2 {
+      color: #667eea;
+      margin-bottom: 1rem;
+      font-size: 1.2rem;
+    }
+    button {
+      background: #667eea;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-weight: 600;
+    }
+    button:hover {
+      background: #5568d3;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .loading {
+      display: none;
+      color: #667eea;
+      font-weight: 600;
+      margin-top: 1rem;
+    }
+    .loading.show { display: block; }
+    .results {
+      margin-top: 1.5rem;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .stat-card {
+      background: white;
+      padding: 1rem;
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .stat-number {
+      font-size: 2rem;
+      font-weight: bold;
+      color: #667eea;
+    }
+    .stat-label {
+      color: #666;
+      font-size: 0.9rem;
+      margin-top: 0.5rem;
+    }
+    .image-list {
+      max-height: 400px;
+      overflow-y: auto;
+      background: white;
+      border-radius: 8px;
+      padding: 1rem;
+    }
+    .image-item {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.75rem;
+      border-bottom: 1px solid #eee;
+      transition: background 0.2s;
+    }
+    .image-item:hover {
+      background: #f8f9fa;
+    }
+    .image-item:last-child {
+      border-bottom: none;
+    }
+    .image-thumb {
+      width: 60px;
+      height: 60px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 2px solid #eee;
+    }
+    .image-info {
+      flex: 1;
+    }
+    .image-name {
+      font-weight: 600;
+      color: #333;
+      word-break: break-all;
+    }
+    .image-url {
+      font-size: 0.8rem;
+      color: #999;
+      font-family: monospace;
+      margin-top: 0.25rem;
+    }
+    .badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-used {
+      background: #d4edda;
+      color: #155724;
+    }
+    .badge-unused {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    .alert {
+      padding: 1rem;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+    }
+    .alert-info {
+      background: #d1ecf1;
+      color: #0c5460;
+      border-left: 4px solid #17a2b8;
+    }
+    .alert-warning {
+      background: #fff3cd;
+      color: #856404;
+      border-left: 4px solid #ffc107;
+    }
+    .alert-danger {
+      background: #f8d7da;
+      color: #721c24;
+      border-left: 4px solid #dc3545;
+    }
+    .copy-btn {
+      background: #28a745;
+      padding: 0.5rem 1rem;
+      font-size: 0.85rem;
+    }
+    .copy-btn:hover {
+      background: #218838;
+    }
+    pre {
+      background: #2d2d2d;
+      color: #f8f8f2;
+      padding: 1rem;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+    .action-buttons {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🧹 Image Cleanup Tool</h1>
+    <p class="subtitle">Identify and clean up unused images from Azure Blob Storage</p>
+
+    <!-- Step 1: Analyze -->
+    <div class="section">
+      <h2>Step 1: Analyze Images</h2>
+      <p style="margin-bottom: 1rem; color: #666;">
+        This will scan all articles in your database and identify which images are used vs unused.
+      </p>
+      <button id="analyzeBtn" onclick="analyzeImages()">
+        🔍 Analyze Images
+      </button>
+      <div id="analyzeLoading" class="loading">
+        ⏳ Analyzing articles and images...
+      </div>
+      <div id="analyzeResults" class="results"></div>
+    </div>
+
+    <!-- Step 2: Review -->
+    <div class="section" id="reviewSection" style="display: none;">
+      <h2>Step 2: Review Results</h2>
+      <div id="statsContainer"></div>
+      <div id="imagesContainer"></div>
+    </div>
+
+    <!-- Step 3: Cleanup -->
+    <div class="section" id="cleanupSection" style="display: none;">
+      <h2>Step 3: Cleanup Options</h2>
+      <div class="alert alert-warning">
+        ⚠️ <strong>Warning:</strong> Deletion is permanent and cannot be undone. Make sure you have backups!
+      </div>
+      <div id="cleanupOptions"></div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_BASE_URL = 'https://kloudvin.blob.core.windows.net/images/';
+    const DB_API_BASE = '/data-api/rest';
+
+    let allImages = [];
+    let usedImages = [];
+    let unusedImages = [];
+
+    // Analyze images
+    async function analyzeImages() {
+      const btn = document.getElementById('analyzeBtn');
+      const loading = document.getElementById('analyzeLoading');
+      const results = document.getElementById('analyzeResults');
+
+      btn.disabled = true;
+      loading.classList.add('show');
+      results.innerHTML = '';
+
+      try {
+        // Step 1: Fetch all articles
+        console.log('Fetching articles...');
+        const articlesResponse = await fetch(`${DB_API_BASE}/Article`);
+        if (!articlesResponse.ok) throw new Error('Failed to fetch articles');
+        
+        const articlesData = await articlesResponse.json();
+        const articles = articlesData.value || [];
+        
+        console.log(`Found ${articles.length} articles`);
+
+        // Step 2: Extract image URLs from article content
+        const imageRegex = /https:\/\/kloudvin\.blob\.core\.windows\.net\/images\/([^\s\)"\]]+)/g;
+        const usedImageNames = new Set();
+
+        articles.forEach(article => {
+          if (article.content) {
+            const matches = article.content.matchAll(imageRegex);
+            for (const match of matches) {
+              usedImageNames.add(match[1]);
+            }
+          }
+        });
+
+        console.log(`Found ${usedImageNames.size} unique images used in articles`);
+
+        // Step 3: Get list of all images from storage
+        // Note: This requires Azure Storage API access
+        // For now, we'll work with images found in articles
+        
+        usedImages = Array.from(usedImageNames).map(name => ({
+          name: name,
+          url: STORAGE_BASE_URL + name,
+          used: true
+        }));
+
+        // Display results
+        displayResults(articles.length, usedImages.length);
+
+      } catch (error) {
+        console.error('Error analyzing images:', error);
+        results.innerHTML = `
+          <div class="alert alert-danger">
+            ❌ <strong>Error:</strong> ${error.message}
+            <br><br>
+            Make sure you're logged in and have access to the database.
+          </div>
+        `;
+      } finally {
+        btn.disabled = false;
+        loading.classList.remove('show');
+      }
+    }
+
+    function displayResults(articleCount, usedImageCount) {
+      const reviewSection = document.getElementById('reviewSection');
+      const statsContainer = document.getElementById('statsContainer');
+      const imagesContainer = document.getElementById('imagesContainer');
+      const cleanupSection = document.getElementById('cleanupSection');
+
+      reviewSection.style.display = 'block';
+
+      // Display stats
+      statsContainer.innerHTML = `
+        <div class="stats">
+          <div class="stat-card">
+            <div class="stat-number">${articleCount}</div>
+            <div class="stat-label">Total Articles</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number">${usedImageCount}</div>
+            <div class="stat-label">Images in Use</div>
+          </div>
+        </div>
+      `;
+
+      // Display used images
+      if (usedImages.length > 0) {
+        imagesContainer.innerHTML = `
+          <h3 style="margin-bottom: 1rem; color: #28a745;">✅ Images Currently in Use (${usedImages.length})</h3>
+          <div class="alert alert-info">
+            ℹ️ These images are referenced in your articles. <strong>Do not delete these!</strong>
+          </div>
+          <div class="image-list">
+            ${usedImages.map(img => `
+              <div class="image-item">
+                <img src="${img.url}" alt="${img.name}" class="image-thumb" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect fill=%22%23ddd%22 width=%22100%22 height=%22100%22/%3E%3Ctext x=%2250%22 y=%2250%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%23999%22 font-size=%2214%22%3ENo Preview%3C/text%3E%3C/svg%3E'">
+                <div class="image-info">
+                  <div class="image-name">${img.name}</div>
+                  <div class="image-url">${img.url}</div>
+                </div>
+                <span class="badge badge-used">IN USE</span>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } else {
+        imagesContainer.innerHTML = `
+          <div class="alert alert-info">
+            ℹ️ No images found in articles. Either you haven't uploaded any images yet, or they're not referenced in article content.
+          </div>
+        `;
+      }
+
+      // Display cleanup options
+      cleanupSection.style.display = 'block';
+      displayCleanupOptions();
+    }
+
+    function displayCleanupOptions() {
+      const cleanupOptions = document.getElementById('cleanupOptions');
+
+      cleanupOptions.innerHTML = `
+        <div class="alert alert-info">
+          ℹ️ <strong>To clean up unused images:</strong>
+          <ol style="margin-top: 0.5rem; margin-left: 1.5rem;">
+            <li>Go to Azure Portal: <a href="https://portal.azure.com" target="_blank">portal.azure.com</a></li>
+            <li>Navigate to Storage Account: <strong>Kloudvin</strong></li>
+            <li>Click: Containers → <strong>Images</strong></li>
+            <li>Review all images in the container</li>
+            <li>Delete images that are NOT in the "Images in Use" list above</li>
+          </ol>
+        </div>
+
+        <h3 style="margin: 1.5rem 0 1rem; color: #333;">📋 Export Used Images List</h3>
+        <p style="margin-bottom: 1rem; color: #666;">
+          Copy this list to keep track of which images should NOT be deleted:
+        </p>
+        <div class="action-buttons">
+          <button class="copy-btn" onclick="copyUsedImagesList()">
+            📋 Copy List to Clipboard
+          </button>
+          <button class="copy-btn" onclick="downloadUsedImagesList()">
+            💾 Download as Text File
+          </button>
+        </div>
+        <pre id="usedImagesList">${usedImages.map(img => img.name).join('\n') || 'No images found'}</pre>
+
+        <h3 style="margin: 1.5rem 0 1rem; color: #333;">🔧 Azure CLI Commands</h3>
+        <p style="margin-bottom: 1rem; color: #666;">
+          Advanced: Use these commands to list and delete images via Azure CLI:
+        </p>
+        <pre># List all images in storage
+az storage blob list \\
+  --account-name Kloudvin \\
+  --container-name Images \\
+  --output table
+
+# Delete specific image (replace IMAGE_NAME)
+az storage blob delete \\
+  --account-name Kloudvin \\
+  --container-name Images \\
+  --name "IMAGE_NAME.png"</pre>
+      `;
+    }
+
+    function copyUsedImagesList() {
+      const list = usedImages.map(img => img.name).join('\n');
+      navigator.clipboard.writeText(list).then(() => {
+        alert('✅ List copied to clipboard!');
+      }).catch(err => {
+        console.error('Failed to copy:', err);
+        alert('❌ Failed to copy. Please select and copy manually.');
+      });
+    }
+
+    function downloadUsedImagesList() {
+      const list = usedImages.map(img => `${img.name}\n${img.url}\n`).join('\n');
+      const content = `KloudVin - Images Currently in Use\n` +
+                     `Generated: ${new Date().toLocaleString()}\n` +
+                     `Total: ${usedImages.length} images\n` +
+                     `\n${'='.repeat(60)}\n\n` +
+                     list;
+      
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `kloudvin-used-images-${Date.now()}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // Auto-run on page load if logged in
+    window.addEventListener('load', () => {
+      console.log('Image Cleanup Tool loaded');
+      console.log('Click "Analyze Images" to start');
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "kloudvin-api",
+  "version": "1.0.0",
+  "description": "Azure Functions for Kloudvin image upload and DOCX conversion",
+  "scripts": {
+    "start": "func start",
+    "test": "echo \"No tests yet\""
+  },
+  "dependencies": {
+    "@azure/storage-blob": "^12.17.0",
+    "mammoth": "^1.6.0",
+    "parse-multipart": "^1.0.4"
+  },
+  "devDependencies": {}
+}

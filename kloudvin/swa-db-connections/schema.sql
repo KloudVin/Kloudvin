@@ -7,9 +7,14 @@ CREATE TABLE dbo.Users (
     username NVARCHAR(50) NOT NULL UNIQUE,
     email NVARCHAR(100) NOT NULL UNIQUE,
     password_hash NVARCHAR(255) NOT NULL,
+    role NVARCHAR(20) DEFAULT 'Editor', -- Administrator or Editor
     created_at DATETIME2 DEFAULT GETUTCDATE(),
     last_login DATETIME2,
     is_admin BIT DEFAULT 0,
+    otp_code NVARCHAR(10),
+    otp_expires DATETIME2,
+    otp_type NVARCHAR(10), -- email or sms
+    phone NVARCHAR(20) NOT NULL, -- Required: Format +CountryCode PhoneNumber (e.g., +91 9876543210)
     INDEX IX_Users_Username (username),
     INDEX IX_Users_Email (email)
 );
@@ -34,7 +39,7 @@ CREATE TABLE dbo.Articles (
 
 -- Insert default admin user (password: kloudvin@2026)
 -- Note: In production, use proper password hashing (bcrypt, etc.)
-INSERT INTO dbo.Users (username, email, password_hash, is_admin)
-VALUES ('admin', 'admin@kloudvin.com', 'kloudvin@2026', 1);
+INSERT INTO dbo.Users (username, email, password_hash, role, is_admin, phone)
+VALUES ('admin', 'admin@kloudvin.com', 'kloudvin@2026', 'Administrator', 1, '+91 0000000000');
 
 GO
