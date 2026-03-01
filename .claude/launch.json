@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-l", "4280", "."],
+      "port": 4280,
+      "cwd": "kloudvin"
+    },
+    {
+      "name": "azure-functions",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 7071,
+      "cwd": "kloudvin/api"
+    }
+  ]
+}

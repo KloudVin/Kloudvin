@@ -16,15 +16,53 @@ module.exports = async function (context, req) {
         const id = req.params.id;
         const updates = req.body;
         const pool = await sql.connect(config);
-        
+
+        // Fetch the current user record first
+        const currentUserResult = await pool.request()
+            .input('id', sql.Int, id)
+            .query('SELECT * FROM dbo.Users WHERE id = @id');
+
+        if (currentUserResult.recordset.length === 0) {
+            context.res = {
+                status: 404,
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+                body: { error: 'User not found' }
+            };
+            return;
+        }
+
+        const currentUser = currentUserResult.recordset[0];
+
         // Build dynamic UPDATE query based on provided fields
         const fields = [];
         const request = pool.request().input('id', sql.Int, id);
-        
+
         if (updates.email !== undefined) {
-            fields.push('email = @email');
-            request.input('email', sql.NVarChar, updates.email);
+            const newEmail = updates.email.toLowerCase().trim();
+            const currentEmail = (currentUser.email || '').toLowerCase().trim();
+
+            if (newEmail !== currentEmail) {
+                // Email is changing — check it's not already taken by another user
+                const emailCheck = await pool.request()
+                    .input('emailCheck', sql.NVarChar, newEmail)
+                    .input('idCheck', sql.Int, id)
+                    .query('SELECT id FROM dbo.Users WHERE LOWER(email) = LOWER(@emailCheck) AND id != @idCheck');
+
+                if (emailCheck.recordset.length > 0) {
+                    context.res = {
+                        status: 409,
+                        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+                        body: { error: 'Email address is already in use by another account.' }
+                    };
+                    return;
+                }
+
+                fields.push('email = @email');
+                request.input('email', sql.NVarChar, updates.email);
+            }
+            // If email is unchanged, skip it entirely — no-op avoids duplicate key errors
         }
+
         if (updates.password_hash !== undefined) {
             fields.push('password_hash = @password_hash');
             request.input('password_hash', sql.NVarChar, updates.password_hash);
@@ -45,56 +83,36 @@ module.exports = async function (context, req) {
             fields.push('last_login = @last_login');
             request.input('last_login', sql.DateTime, updates.last_login);
         }
-        
+
         if (fields.length === 0) {
+            // Nothing actually changed — return the current user as-is (success)
             context.res = {
-                status: 400,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                },
-                body: { error: 'No fields to update' }
+                status: 200,
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+                body: currentUser
             };
             return;
         }
-        
+
         const query = `
-            UPDATE dbo.Users 
+            UPDATE dbo.Users
             SET ${fields.join(', ')}
             WHERE id = @id;
             SELECT * FROM dbo.Users WHERE id = @id;
         `;
-        
+
         const result = await request.query(query);
-        
-        if (result.recordset.length === 0) {
-            context.res = {
-                status: 404,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                },
-                body: { error: 'User not found' }
-            };
-            return;
-        }
-        
+
         context.res = {
             status: 200,
-            headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
             body: result.recordset[0]
         };
     } catch (error) {
         context.log.error('Error updating user:', error);
         context.res = {
             status: 500,
-            headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
+            headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
             body: { error: error.message }
         };
     }

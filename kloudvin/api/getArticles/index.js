@@ -1,19 +1,8 @@
-const sql = require('mssql');
-
-const config = {
-    server: process.env.DB_SERVER || 'kloudvin.database.windows.net',
-    database: process.env.DB_NAME || 'kloudvin',
-    user: process.env.DB_USER || 'kloudvin',
-    password: process.env.DB_PASSWORD || 'Vins@6579',
-    options: {
-        encrypt: true,
-        trustServerCertificate: false
-    }
-};
+const { getPool } = require('../shared/db-config');
 
 module.exports = async function (context, req) {
     try {
-        const pool = await sql.connect(config);
+        const pool = await getPool();
         
         const orderBy = req.query.$orderby || 'created_at desc';
         const orderMatch = orderBy.match(/(\w+)\s*(asc|desc)?/i);

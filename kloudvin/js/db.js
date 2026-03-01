@@ -202,8 +202,17 @@ async function createArticle(article) {
     });
     
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to create article');
+      const errBody = await response.json();
+      const err = new Error(errBody.error || errBody.message || 'Failed to create article');
+      err.status = response.status;
+      err.code = errBody.code || null;
+      
+      // For duplicate key errors, make sure the code is set
+      if (response.status === 409 || errBody.code === 'DUPLICATE_ID') {
+        err.code = 'DUPLICATE_ID';
+      }
+      
+      throw err;
     }
     
     const data = await response.json();
@@ -394,7 +403,7 @@ async function updateExistingUser(userId, username, email, password, role, phone
       console.error('Update error response:', errorText);
       try {
         const error = JSON.parse(errorText);
-        return { success: false, message: error.message || 'Failed to update user' };
+        return { success: false, message: error.error || error.message || 'Failed to update user' };
       } catch {
         return { success: false, message: `Failed to update user: ${response.status}` };
       }

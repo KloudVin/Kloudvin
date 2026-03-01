@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 4280
+    },
+    {
+      "name": "azure-functions",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 7071,
+      "cwd": "api"
+    }
+  ]
+}

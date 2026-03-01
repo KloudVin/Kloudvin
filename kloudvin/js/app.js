@@ -283,6 +283,15 @@ function switchEditorMode(mode) {
     writeEl.style.display = '';
     uploadEl.style.display = 'none';
     btnW.classList.add('active'); btnU.classList.remove('active');
+    
+    // If switching from upload mode with content, transfer it to the write editor
+    if (uploadedFileContent) {
+      const contentEl = document.getElementById('artContent');
+      if (contentEl && !contentEl.value.trim()) {
+        contentEl.value = uploadedFileContent;
+        showToast('Content loaded into editor. You can now edit it! ✏️');
+      }
+    }
   } else {
     writeEl.style.display = 'none';
     uploadEl.style.display = '';
@@ -694,16 +703,45 @@ function formatFileSize(bytes) {
 }
 
 function openEditor() {
+  console.log('🚪 openEditor called. Current editingArticleId:', window.editingArticleId);
+  
   const panel = document.getElementById('editorPanel');
   const overlay = document.getElementById('editorOverlay');
   if (panel) panel.classList.add('open');
   if (overlay) overlay.classList.add('open');
   document.body.style.overflow = 'hidden';
-  // Reset to write mode and clear upload state
-  switchEditorMode('write');
-  removeUploadedFile();
+  
+  // Only clear editing flag and reset form if NOT editing an existing article
+  if (!window.editingArticleId) {
+    console.log('🆕 New article mode - clearing form');
+    
+    // Reset header for new article
+    const editorHeader = document.querySelector('.editor-header h2');
+    if (editorHeader) {
+      editorHeader.innerHTML = '<i class="fas fa-pen-to-square"></i> New Article';
+    }
+    
+    // Reset to write mode and clear upload state for new articles
+    switchEditorMode('write');
+    removeUploadedFile();
+    
+    // Clear form fields for new article
+    const titleEl = document.getElementById('artTitle');
+    const descEl = document.getElementById('artDesc');
+    const contentEl = document.getElementById('artContent');
+    if (titleEl) titleEl.value = '';
+    if (descEl) descEl.value = '';
+    if (contentEl) contentEl.value = '';
+    currentTags = [];
+    renderTags();
+  } else {
+    console.log('✏️ Edit mode - keeping form data. editingArticleId:', window.editingArticleId);
+  }
+  
   // Populate category dropdown
   updateCategoryDropdowns();
+  
+  console.log('🚪 openEditor complete. Final editingArticleId:', window.editingArticleId);
 }
 
 function closeEditor() {
@@ -938,6 +976,63 @@ async function publishArticle() {
   if (!desc) { showToast('Please enter a short description!', true); return; }
   if (!content) { showToast('Please add article content — write or upload a file!', true); return; }
 
+  // Check if we're editing an existing article
+  console.log('🔍 Checking editingArticleId:', window.editingArticleId);
+  console.log('🔍 Type of editingArticleId:', typeof window.editingArticleId);
+  console.log('🔍 Is truthy?', !!window.editingArticleId);
+  
+  if (window.editingArticleId) {
+    console.log('✏️ UPDATING existing article:', window.editingArticleId);
+    try {
+      const updates = {
+        title,
+        description: desc,
+        category,
+        content,
+        tags: currentTags.join(',')
+      };
+      
+      console.log('📤 Sending update request for article:', window.editingArticleId);
+      await updateArticle(window.editingArticleId, updates);
+      console.log('✅ Update successful!');
+      
+      // Reset form
+      document.getElementById('artTitle').value = '';
+      document.getElementById('artDesc').value = '';
+      document.getElementById('artContent').value = '';
+      currentTags = [];
+      renderTags();
+      removeUploadedFile();
+      switchEditorMode('write');
+      closeEditor();
+      
+      // Clear editing flag
+      const oldId = window.editingArticleId;
+      window.editingArticleId = null;
+      console.log('🧹 Cleared editingArticleId (was:', oldId, ')');
+      
+      showToast('Article updated successfully! ✅');
+      
+      // Refresh article list
+      refreshArticlesList();
+      
+      // Re-render posts
+      const postsGrid = document.getElementById('postsGrid');
+      if (postsGrid) {
+        if (window.location.pathname.includes('pages/')) await renderPostsSub('postsGrid');
+        else await renderPosts('postsGrid');
+      }
+      
+      return;
+    } catch (error) {
+      console.error('❌ Error updating article:', error);
+      showToast('Failed to update article: ' + (error.message || 'Unknown error'), true);
+      return;
+    }
+  }
+
+  console.log('➕ CREATING new article');
+
   const now = new Date();
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const dateStr = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
@@ -952,23 +1047,40 @@ async function publishArticle() {
   
   let id = baseId;
   let attempt = 0;
+  const MAX_ATTEMPTS = 5;
 
-  const article = { 
-    id, 
-    title, 
-    description: desc, 
-    category, 
-    date_published: dateStr, 
+  // Build the article object (id will be updated on each retry)
+  const article = {
+    title,
+    description: desc,
+    category,
+    date_published: dateStr,
     content,
     author_id: currentUser ? currentUser.id : null
   };
 
   try {
-    // Try to save to database
-    await createArticle(article);
-    
+    let savedArticle = null;
+
+    // Retry loop: if the slug already exists, append -2, -3, … up to MAX_ATTEMPTS
+    while (attempt < MAX_ATTEMPTS) {
+      id = attempt === 0 ? baseId : `${baseId}-${attempt + 1}`;
+      article.id = id;
+
+      try {
+        savedArticle = await createArticle(article);
+        break; // success — exit retry loop
+      } catch (err) {
+        if (err.code === 'DUPLICATE_ID' && attempt < MAX_ATTEMPTS - 1) {
+          attempt++;
+          continue; // try next suffix
+        }
+        throw err; // non-duplicate error or exhausted retries — bubble up
+      }
+    }
+
     // Add to local array for immediate display
-    articles.unshift(article);
+    articles.unshift({ ...article, ...(savedArticle || {}) });
 
     // Reset form
     document.getElementById('artTitle').value = '';
@@ -979,6 +1091,16 @@ async function publishArticle() {
     closeEditor();
     showToast('Article published to "' + category + '" topic! 🎉');
 
+    // Send notification emails to subscribers
+    notifySubscribersNewArticle(article).then(result => {
+      if (result.success && result.count > 0) {
+        console.log(`Notification emails sent to ${result.count} subscribers`);
+        showToast(`📧 Notified ${result.count} subscriber${result.count > 1 ? 's' : ''}!`);
+      }
+    }).catch(error => {
+      console.error('Error sending notification emails:', error);
+    });
+
     // Re-render
     const postsGrid = document.getElementById('postsGrid');
     if (postsGrid) {
@@ -987,12 +1109,10 @@ async function publishArticle() {
     }
   } catch (error) {
     console.error('Error publishing article:', error);
-    
-    // If it's a conflict error (409), suggest changing the title
-    if (error.message.includes('Conflict') || error.message.includes('409')) {
-      showToast('An article with this title already exists. Please change the title or delete the existing article.', true);
+    if (error.code === 'DUPLICATE_ID') {
+      showToast('Could not generate a unique article ID after several attempts. Please change the title slightly and try again.', true);
     } else {
-      showToast('Failed to publish article. Please try again.', true);
+      showToast('Failed to publish article: ' + (error.message || 'Unknown error'), true);
     }
   }
 }
@@ -1699,6 +1819,35 @@ function switchCMSTab(tabName) {
 }
 
 // EmailJS Configuration
+function getEmailJSConfig() {
+  const stored = localStorage.getItem('emailjs_config');
+  if (!stored) {
+    return {
+      serviceId: null,
+      templateOTP: null,
+      templateIdWelcome: null,
+      templateWelcome: null,
+      publicKey: null
+    };
+  }
+
+  try {
+    const config = JSON.parse(stored);
+    // Ensure templateIdWelcome is set (alias for templateWelcome)
+    config.templateIdWelcome = config.templateWelcome || config.templateIdWelcome;
+    return config;
+  } catch (error) {
+    console.error('Error parsing EmailJS config:', error);
+    return {
+      serviceId: null,
+      templateOTP: null,
+      templateIdWelcome: null,
+      templateWelcome: null,
+      publicKey: null
+    };
+  }
+}
+
 function loadEmailJSConfig() {
   console.log('loadEmailJSConfig called');
   const stored = localStorage.getItem('emailjs_config');
@@ -1913,6 +2062,9 @@ function viewArticle(articleId) {
 
 async function editArticle(articleId) {
   try {
+    console.log('📝 editArticle called with ID:', articleId);
+    console.log('📝 Current editingArticleId before setting:', window.editingArticleId);
+    
     // Load the article
     const articles = await getArticles();
     const article = articles.find(a => a.id === articleId);
@@ -1922,11 +2074,26 @@ async function editArticle(articleId) {
       return;
     }
     
+    console.log('📝 Found article:', article.title);
+    
+    // Store original ID for update BEFORE opening editor
+    window.editingArticleId = articleId;
+    console.log('✅ Set window.editingArticleId to:', window.editingArticleId);
+    console.log('✅ Type:', typeof window.editingArticleId);
+    
     // Close CMS modal
     closeCMSModal();
     
     // Open editor
+    console.log('📝 Opening editor...');
     openEditor();
+    
+    // Update editor header to show "Edit Article"
+    const editorHeader = document.querySelector('.editor-header h2');
+    if (editorHeader) {
+      editorHeader.innerHTML = '<i class="fas fa-edit"></i> Edit Article';
+      console.log('✅ Updated editor header');
+    }
     
     // Populate form
     document.getElementById('artTitle').value = article.title;
@@ -1938,13 +2105,12 @@ async function editArticle(articleId) {
     currentTags = article.tags || [];
     renderTags();
     
-    // Store original ID for update
-    window.editingArticleId = articleId;
-    
+    console.log('✅ Article loaded for editing. editingArticleId:', window.editingArticleId);
+    console.log('✅ Verify window.editingArticleId is still set:', window.editingArticleId);
     showToast('Editing article: ' + article.title);
     
   } catch (error) {
-    console.error('Error loading article for edit:', error);
+    console.error('❌ Error loading article for edit:', error);
     showToast('Failed to load article', true);
   }
 }
@@ -2076,77 +2242,433 @@ async function refreshCategoriesList() {
   container.innerHTML = html;
 }
 
+// Comprehensive emoji library - ALL categories
+const allEmojis = [
+  // Smileys & Emotion
+  '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇',
+  '🥰', '😍', '🤩', '😘', '😗', '😚', '😙', '🥲', '😋', '😛', '😜', '🤪', '😝',
+  '🤑', '🤗', '🤭', '🤫', '🤔', '🤐', '🤨', '😐', '😑', '😶', '😏', '😒', '🙄',
+  '😬', '🤥', '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢', '🤮', '🤧',
+  '🥵', '🥶', '😎', '🤓', '🧐', '😕', '😟', '🙁', '☹️', '😮', '😯', '😲', '😳',
+  '🥺', '😦', '😧', '😨', '😰', '😥', '😢', '😭', '😱', '😖', '😣', '😞', '😓',
+  '😩', '😫', '🥱', '😤', '😡', '😠', '🤬', '😈', '👿', '💀', '☠️',
+
+  // Robots & AI
+  '🤖', '🦾', '🦿', '👾', '🎮', '🕹️', '💻', '🖥️', '⌨️', '🖱️', '🖨️', '💾', '💿',
+  '📀', '🧠', '🔬', '🔭', '⚗️', '🧪', '🧬', '🔌', '💡', '🔦', '🕯️',
+
+  // Cloud & Weather
+  '☁️', '🌩️', '⛈️', '🌦️', '🌧️', '⛅', '🌤️', '🌥️', '💨', '🌪️', '🌫️', '🌬️',
+
+  // Rockets & Space
+  '🚀', '🛸', '🛰️', '🌌', '🌠', '🌟', '⭐', '✨', '💫', '⚡', '🔥', '💥',
+
+  // Technical & Engineering
+  '⚙️', '🔧', '🔩', '🛠️', '⚒️', '🔨', '⛏️', '🪛', '🪚', '⚡', '🔌', '💡', '🔦',
+
+  // Security & Protection
+  '🔒', '🔓', '🔑', '🗝️', '🔐', '🛡️', '⚔️', '🗡️',
+
+  // Construction & Building
+  '🏗️', '🏭', '🏢', '🏛️', '🏰', '🏚️', '🏘️', '🌆', '🌇', '🌃', '🌉', '🌁',
+  '🧱', '🪵', '🪨', '🚧', '⚠️', '🚨', '⛔', '🛑',
+
+  // Containers & Storage
+  '🐳', '📦', '📮', '📫', '📪', '📬', '📭', '📄', '📃', '📑', '🗃️', '🗄️', '📁', '📂',
+
+  // Charts & Analytics
+  '📊', '📈', '📉', '💹', '💱', '💲', '💰', '💳', '🧾', '📋',
+
+  // Devices & Computers
+  '💻', '🖥️', '🖨️', '⌨️', '🖱️', '🖲️', '💽', '💾', '💿', '📀', '📱', '📲',
+  '☎️', '📞', '📟', '📠', '📺', '📻', '🎙️', '🎚️', '🎛️',
+
+  // Network & Communication
+  '🌐', '🌍', '🌎', '🌏', '🗺️', '📡', '📶', '📳', '📴', '🛰️',
+
+  // Code & Development
+  '💾', '📝', '📄', '📃', '📋', '📁', '📂', '🗂️', '📅', '📆', '🗒️', '🗓️',
+
+  // Tools & Objects
+  '⚙️', '🔧', '🔨', '⚒️', '🛠️', '⛏️', '🪛', '🪚', '🔩', '⚡', '🔌', '💡', '🔦',
+
+  // Fire & Energy
+  '🔥', '💥', '💫', '✨', '⚡', '🌟', '💫', '⭐',
+
+  // Design & Art
+  '🎨', '🖌️', '🖍️', '🖊️', '🖋️', '✏️', '✒️', '📐', '📏', '📌', '📍', '✂️',
+
+  // Communication & Mail
+  '📧', '📨', '📩', '📤', '📥', '📦', '📫', '📪', '📬', '📭', '📮', '📢', '📣',
+  '📯', '🔔', '🔕', '💌', '💬', '💭', '🗨️', '🗯️',
+
+  // Games & Entertainment
+  '🎮', '🕹️', '🎯', '🎲', '♠️', '♥️', '♦️', '♣️', '🃏', '🎰', '🎳', '🎪',
+
+  // Flags & Symbols
+  '🚩', '🏁', '🏴', '🏳️', '🏳️‍🌈', '⚠️', '🔰', '♻️', '⚛️', '🕉️', '✡️', '☸️',
+  '☯️', '✝️', '☦️', '☪️', '☮️', '🕎', '🔯', '♈', '♉', '♊', '♋', '♌', '♍',
+
+  // Science & Medicine
+  '🧪', '🧬', '🔬', '🔭', '⚗️', '🧮', '🩺', '💉', '💊', '🩹', '🩼', '⚕️',
+
+  // Transportation
+  '🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🛻', '🚚', '🚛',
+  '🚜', '🏍️', '🛵', '🚲', '🛴', '✈️', '🛩️', '🚁', '🚂', '🚊', '🚝', '🚄', '🚅',
+
+  // Nature & Animals
+  '🌳', '🌲', '🌴', '🌵', '🌾', '🌿', '🍀', '🎋', '🎍', '🍃', '🍂', '🍁', '🌱',
+  '🐕', '🐶', '🐩', '🐈', '🐱', '🦁', '🐯', '🐅', '🐆', '🦒', '🦓', '🐘', '🦏',
+
+  // Food & Drink
+  '🍕', '🍔', '🍟', '🌭', '🍿', '🧂', '☕', '🍵', '🥤', '🧃', '🧉', '🍺', '🍻',
+
+  // Sports & Activities
+  '⚽', '🏀', '🏈', '⚾', '🥎', '🎾', '🏐', '🏉', '🥏', '🎱', '🏓', '🏸', '🏒',
+
+  // Objects & Tools
+  '📱', '💻', '⌚', '⏰', '⏱️', '⏲️', '🕰️', '⌛', '⏳', '📡', '🔋', '🔌', '💡',
+  '🔦', '🕯️', '🧯', '🛢️', '💸', '💵', '💴', '💶', '💷', '🪙', '💰', '💳',
+
+  // Arrows & Symbols
+  '⬆️', '↗️', '➡️', '↘️', '⬇️', '↙️', '⬅️', '↖️', '↕️', '↔️', '↩️', '↪️',
+  '⤴️', '⤵️', '🔃', '🔄', '🔙', '🔚', '🔛', '🔜', '🔝', '✅', '☑️', '❌', '❎',
+  '➕', '➖', '➗', '✖️', '♾️', '‼️', '⁉️', '❓', '❔', '❕', '❗', '〰️',
+
+  // Misc Symbols
+  '©️', '®️', '™️', '💯', '🔠', '🔡', '🔢', '🔣', '🔤', '🆗', '🆕', '🆙', '🆒',
+  '🆓', '🆔', '⭕', '✔️', '☑️', '✅', '❌', '❎', '➰', '➿', '〽️', '✳️', '✴️',
+  '❇️', '‼️', '⁉️', '❓', '❔', '❕', '❗', '©️', '®️', '™️', '#️⃣', '*️⃣', '0️⃣',
+  '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'
+];
+
+let filteredEmojis = [...allEmojis];
+
+let currentSubcategories = [];
+
 function openAddCategoryModal() {
-  const name = prompt('Category Name (e.g., Cloud, DevOps):');
-  if (!name || !name.trim()) return;
-  
-  const icon = prompt('Category Icon (emoji, e.g., ☁️, 🚀):');
-  if (!icon || !icon.trim()) return;
-  
-  const description = prompt('Category Description:');
-  if (!description || !description.trim()) return;
-  
-  const tagsInput = prompt('Subcategories/Tags (comma-separated, e.g., Terraform, Pulumi, Ansible):');
-  const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()).filter(t => t) : [];
-  
-  const categories = getCategories();
-  const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-  
-  // Check if ID already exists
-  if (categories.find(c => c.id === id)) {
-    showToast('Category with this name already exists', true);
+  openCategoryModal('add');
+}
+
+function openCategoryModal(mode, categoryId = null) {
+  const overlay = document.getElementById('categoryModalOverlay');
+  const modal = document.getElementById('categoryModal');
+  const title = document.getElementById('categoryModalTitle');
+
+  // Reset form
+  document.getElementById('categoryName').value = '';
+  document.getElementById('categoryIcon').value = '';
+  document.getElementById('categoryDescription').value = '';
+  document.getElementById('editingCategoryId').value = '';
+  currentSubcategories = [];
+  renderSubcategories();
+
+  if (mode === 'edit' && categoryId) {
+    const categories = getCategories();
+    const category = categories.find(c => c.id === categoryId);
+    if (!category) return;
+
+    title.innerHTML = '<i class="fas fa-edit"></i> Edit Category';
+    document.getElementById('categoryName').value = category.name;
+    document.getElementById('categoryIcon').value = category.icon;
+    document.getElementById('categoryDescription').value = category.description || '';
+    document.getElementById('editingCategoryId').value = category.id;
+    currentSubcategories = category.tags || [];
+    renderSubcategories();
+  } else {
+    title.innerHTML = '<i class="fas fa-tag"></i> Add Category';
+  }
+
+  // Show modal
+  overlay.classList.add('show');
+  modal.classList.add('show');
+  document.body.style.overflow = 'hidden';
+
+  // Initialize emoji picker
+  initEmojiPicker();
+}
+
+function closeCategoryModal() {
+  const overlay = document.getElementById('categoryModalOverlay');
+  const modal = document.getElementById('categoryModal');
+
+  overlay.classList.remove('show');
+  modal.classList.remove('show');
+  document.body.style.overflow = '';
+
+  // Hide emoji picker
+  document.getElementById('emojiPicker').style.display = 'none';
+}
+
+function initEmojiPicker() {
+  renderEmojiGrid(allEmojis);
+}
+
+function renderEmojiGrid(emojis) {
+  const grid = document.getElementById('emojiGrid');
+  if (!grid) return;
+
+  grid.innerHTML = '';
+
+  if (emojis.length === 0) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:var(--text-muted);padding:1rem">No emojis found</div>';
     return;
   }
-  
-  // Assign a color (cycle through available colors)
-  const colors = ['var(--neon-cyan)', 'var(--neon-violet)', 'var(--neon-sky)', 'var(--neon-amber)', 'var(--neon-emerald)', 'var(--neon-rose)'];
-  const color = colors[categories.length % colors.length];
-  
-  categories.push({ 
-    id, 
-    name: name.trim(), 
-    icon: icon.trim(), 
-    description: description.trim(),
-    color: color,
-    tags: tags
+
+  emojis.forEach(emoji => {
+    const item = document.createElement('div');
+    item.className = 'emoji-item';
+    item.textContent = emoji;
+    item.onclick = () => selectEmoji(emoji);
+    grid.appendChild(item);
   });
+}
+
+function filterEmojis(searchTerm) {
+  // For now, we'll just filter by visual similarity since emoji names aren't available
+  // In a production app, you'd map emojis to keywords
+  const term = searchTerm.toLowerCase().trim();
+
+  if (!term) {
+    renderEmojiGrid(allEmojis);
+    return;
+  }
+
+  // Comprehensive keyword-based filtering
+  const emojiKeywords = {
+    // Emotions & Faces
+    'smile': ['😀', '😃', '😄', '😁', '😆', '😅', '😊', '🙂', '🙃', '😉'],
+    'happy': ['😀', '😃', '😄', '😁', '😆', '🤩', '😍', '🥰'],
+    'love': ['😍', '🥰', '😘', '😗', '💕', '💖', '💗', '💘', '💝'],
+    'laugh': ['😂', '🤣', '😅', '😆'],
+    'think': ['🤔', '🤨', '🧐'],
+    'cool': ['😎', '🤓', '😏'],
+
+    // Technology & Devices
+    'robot': ['🤖', '🦾', '🦿', '👾'],
+    'ai': ['🤖', '🧠', '💻', '⚙️'],
+    'computer': ['💻', '🖥️', '⌨️', '🖱️', '🖨️'],
+    'phone': ['📱', '📲', '☎️', '📞'],
+    'tech': ['⚙️', '🔧', '🔩', '🛠️', '⚡', '🔌', '💡'],
+
+    // Cloud & Weather
+    'cloud': ['☁️', '🌩️', '⛈️', '🌦️', '🌧️', '⛅'],
+    'weather': ['☁️', '🌩️', '⛈️', '🌦️', '🌧️', '🌪️'],
+
+    // Space & Stars
+    'rocket': ['🚀', '🛸', '🛰️'],
+    'space': ['🚀', '🛸', '🛰️', '🌌', '🌠'],
+    'star': ['⭐', '✨', '💫', '🌟', '🌠'],
+
+    // Security
+    'lock': ['🔒', '🔓', '🔑', '🛡️', '🔐', '🗝️'],
+    'security': ['🔒', '🔓', '🔑', '🛡️', '🔐', '🗝️'],
+
+    // Containers & Build
+    'docker': ['🐳'],
+    'container': ['🐳', '📦', '🗃️'],
+    'build': ['🏗️', '🏭', '🧱', '🔨', '🛠️'],
+    'construction': ['🏗️', '🚧', '🧱', '🔨', '⚒️', '🛠️'],
+
+    // Data & Analytics
+    'chart': ['📊', '📈', '📉', '💹'],
+    'data': ['📊', '📈', '📉', '💾', '💿', '📀'],
+    'analytics': ['📊', '📈', '📉', '💹'],
+
+    // Network
+    'network': ['🌐', '🌍', '🌎', '🌏', '📡', '📶'],
+    'globe': ['🌐', '🌍', '🌎', '🌏'],
+
+    // Code & Development
+    'code': ['💾', '📝', '📄', '📃', '📋', '💻', '⌨️'],
+    'dev': ['💻', '🖥️', '⌨️', '💾', '📝'],
+
+    // Fire & Energy
+    'fire': ['🔥', '💥', '⚡', '🔥'],
+    'energy': ['⚡', '🔋', '🔌', '💡'],
+
+    // Design & Art
+    'design': ['🎨', '🖌️', '🖍️', '✏️'],
+    'art': ['🎨', '🖌️', '🖍️', '🎭'],
+
+    // Communication
+    'mail': ['📧', '📨', '💌', '📮', '📫'],
+    'email': ['📧', '📨', '💌'],
+    'message': ['💬', '💭', '🗨️'],
+
+    // Games
+    'game': ['🎮', '🕹️', '🎯', '🎲'],
+
+    // Science
+    'science': ['🧪', '🧬', '🔬', '🔭', '⚗️'],
+    'lab': ['🧪', '🧬', '🔬', '⚗️'],
+
+    // Tools
+    'tool': ['🔧', '🔨', '⚒️', '🛠️', '⚙️'],
+    'wrench': ['🔧', '🛠️'],
+    'hammer': ['🔨', '⚒️'],
+
+    // Arrows & Navigation
+    'arrow': ['⬆️', '↗️', '➡️', '↘️', '⬇️', '↙️', '⬅️', '↖️'],
+    'up': ['⬆️', '↗️', '🔝', '🔺'],
+    'down': ['⬇️', '↘️', '🔻'],
+
+    // Status & Checks
+    'check': ['✅', '☑️', '✔️'],
+    'cross': ['❌', '❎'],
+    'warning': ['⚠️', '🚨', '⛔'],
+
+    // Misc
+    'heart': ['❤️', '💕', '💖', '💗', '💘', '💝'],
+    'money': ['💰', '💵', '💴', '💶', '💷', '💸']
+  };
+
+  let filtered = [];
+
+  // Search in keywords
+  for (const [keyword, emojis] of Object.entries(emojiKeywords)) {
+    if (keyword.includes(term)) {
+      filtered.push(...emojis);
+    }
+  }
+
+  // If no matches, show all (user might be typing an emoji directly)
+  if (filtered.length === 0) {
+    filtered = allEmojis.filter(emoji => emoji.includes(searchTerm));
+  }
+
+  // Remove duplicates
+  filtered = [...new Set(filtered)];
+
+  renderEmojiGrid(filtered.length > 0 ? filtered : allEmojis);
+}
+
+function toggleEmojiPicker() {
+  const picker = document.getElementById('emojiPicker');
+  picker.style.display = picker.style.display === 'none' ? 'block' : 'none';
+}
+
+function selectEmoji(emoji) {
+  document.getElementById('categoryIcon').value = emoji;
+  document.getElementById('emojiPicker').style.display = 'none';
+}
+
+function addSubcategory() {
+  const input = document.getElementById('subcategoryInput');
+  const value = input.value.trim();
+
+  if (!value) return;
+
+  if (currentSubcategories.includes(value)) {
+    showToast('Subcategory already added', true);
+    return;
+  }
+
+  currentSubcategories.push(value);
+  renderSubcategories();
+  input.value = '';
+  input.focus();
+}
+
+function removeSubcategory(index) {
+  currentSubcategories.splice(index, 1);
+  renderSubcategories();
+}
+
+function renderSubcategories() {
+  const list = document.getElementById('subcategoriesList');
+  if (!list) return;
+
+  if (currentSubcategories.length === 0) {
+    list.innerHTML = '<div style="color:var(--text-muted);font-size:.85rem;padding:.5rem 0">No subcategories added yet</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  currentSubcategories.forEach((sub, index) => {
+    const tag = document.createElement('div');
+    tag.className = 'subcategory-tag';
+    tag.innerHTML = `
+      ${sub}
+      <button onclick="removeSubcategory(${index})" title="Remove">
+        <i class="fas fa-times"></i>
+      </button>
+    `;
+    list.appendChild(tag);
+  });
+}
+
+function saveCategoryFromModal() {
+  const name = document.getElementById('categoryName').value.trim();
+  const icon = document.getElementById('categoryIcon').value.trim();
+  const description = document.getElementById('categoryDescription').value.trim();
+  const editingId = document.getElementById('editingCategoryId').value;
+
+  // Validation
+  if (!name) {
+    showToast('Please enter a category name', true);
+    return;
+  }
+
+  if (!icon) {
+    showToast('Please select an icon', true);
+    return;
+  }
+
+  if (!description) {
+    showToast('Please enter a description', true);
+    return;
+  }
+
+  const categories = getCategories();
+  const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+  if (editingId) {
+    // Edit existing category
+    const category = categories.find(c => c.id === editingId);
+    if (!category) {
+      showToast('Category not found', true);
+      return;
+    }
+
+    category.name = name;
+    category.icon = icon;
+    category.description = description;
+    category.tags = currentSubcategories;
+
+    showToast('Category updated successfully! ✅');
+  } else {
+    // Add new category
+    if (categories.find(c => c.id === id)) {
+      showToast('Category with this name already exists', true);
+      return;
+    }
+
+    const colors = ['var(--neon-cyan)', 'var(--neon-violet)', 'var(--neon-sky)', 'var(--neon-amber)', 'var(--neon-emerald)', 'var(--neon-rose)'];
+    const color = colors[categories.length % colors.length];
+
+    categories.push({
+      id,
+      name,
+      icon,
+      description,
+      color,
+      tags: currentSubcategories
+    });
+
+    showToast('Category added successfully! ✅');
+  }
+
   saveCategories(categories);
   refreshCategoriesList();
   updateCategoryDropdowns();
   renderTopicCards();
   renderBlogFilters();
-  showToast('Category added successfully! ✅');
+  closeCategoryModal();
 }
 
 function editCategory(categoryId) {
-  const categories = getCategories();
-  const category = categories.find(c => c.id === categoryId);
-  if (!category) return;
-  
-  const name = prompt('Category Name:', category.name);
-  if (!name || !name.trim()) return;
-  
-  const icon = prompt('Category Icon (emoji):', category.icon);
-  if (!icon || !icon.trim()) return;
-  
-  const description = prompt('Category Description:', category.description);
-  if (!description || !description.trim()) return;
-  
-  const currentTags = category.tags ? category.tags.join(', ') : '';
-  const tagsInput = prompt('Subcategories/Tags (comma-separated, e.g., Terraform, Pulumi, Ansible):', currentTags);
-  const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()).filter(t => t) : [];
-  
-  category.name = name.trim();
-  category.icon = icon.trim();
-  category.description = description.trim();
-  category.tags = tags;
-  
-  saveCategories(categories);
-  refreshCategoriesList();
-  updateCategoryDropdowns();
-  renderTopicCards();
-  renderBlogFilters();
-  showToast('Category updated successfully! ✅');
+  openCategoryModal('edit', categoryId);
 }
 
 function deleteCategory(categoryId) {
@@ -2276,5 +2798,206 @@ function checkUserSession() {
       document.body.classList.add('editor-mode');
       document.body.classList.remove('administrator-mode');
     }
+  }
+}
+
+// ================================================================
+// NEWSLETTER / SUBSCRIPTION FUNCTIONALITY
+// ================================================================
+
+/**
+ * Get all subscribers from localStorage
+ */
+function getSubscribers() {
+  const stored = localStorage.getItem('site_subscribers');
+  return stored ? JSON.parse(stored) : [];
+}
+
+/**
+ * Save subscribers to localStorage
+ */
+function saveSubscribers(subscribers) {
+  localStorage.setItem('site_subscribers', JSON.stringify(subscribers));
+}
+
+/**
+ * Add a new subscriber
+ */
+function addSubscriber(email) {
+  const subscribers = getSubscribers();
+
+  if (subscribers.includes(email)) {
+    return { success: false, message: 'You are already subscribed!' };
+  }
+
+  subscribers.push(email);
+  saveSubscribers(subscribers);
+
+  return { success: true, message: 'Successfully subscribed!' };
+}
+
+/**
+ * Handle subscribe button click
+ */
+async function handleSubscribe() {
+  const emailInput = document.getElementById('subscribeEmail');
+  const messageDiv = document.getElementById('subscribeMessage');
+  const email = emailInput.value.trim();
+
+  // Validate email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email) {
+    showSubscribeMessage('Please enter your email address', 'error');
+    return;
+  }
+
+  if (!emailRegex.test(email)) {
+    showSubscribeMessage('Please enter a valid email address', 'error');
+    return;
+  }
+
+  // Add to subscribers
+  const result = addSubscriber(email);
+
+  if (!result.success) {
+    showSubscribeMessage(result.message, 'warning');
+    return;
+  }
+
+  // Send welcome email
+  const emailSent = await sendWelcomeEmail(email);
+
+  if (emailSent) {
+    showSubscribeMessage('✅ Subscribed successfully! Check your email for confirmation.', 'success');
+    emailInput.value = '';
+  } else {
+    showSubscribeMessage('✅ Subscribed! (Note: Email notification failed, but you are subscribed)', 'success');
+    emailInput.value = '';
+  }
+}
+
+/**
+ * Show subscribe message
+ */
+function showSubscribeMessage(message, type) {
+  const messageDiv = document.getElementById('subscribeMessage');
+  if (!messageDiv) return;
+
+  messageDiv.style.display = 'block';
+  messageDiv.textContent = message;
+
+  // Style based on type
+  if (type === 'success') {
+    messageDiv.style.color = 'var(--neon-emerald)';
+  } else if (type === 'error') {
+    messageDiv.style.color = 'var(--neon-rose)';
+  } else if (type === 'warning') {
+    messageDiv.style.color = 'var(--neon-amber)';
+  }
+
+  // Hide after 5 seconds
+  setTimeout(() => {
+    messageDiv.style.display = 'none';
+  }, 5000);
+}
+
+/**
+ * Send welcome email using EmailJS
+ */
+async function sendWelcomeEmail(email) {
+  try {
+    const config = getEmailJSConfig();
+
+    if (!config.serviceId || !config.templateIdWelcome || !config.publicKey) {
+      console.warn('EmailJS not configured. Skipping welcome email.');
+      return false;
+    }
+
+    // Initialize EmailJS
+    emailjs.init(config.publicKey);
+
+    const templateParams = {
+      user_name: email.split('@')[0],
+      user_email: email,
+      subject: 'Welcome to KloudVin!',
+      message: 'Thank you for subscribing to KloudVin! You will receive notifications when new technical articles are published. Stay tuned for deep-dive articles on Cloud Architecture, DevOps, Kubernetes, IaC, and more.',
+      from_name: 'KloudVin'
+    };
+
+    const response = await emailjs.send(
+      config.serviceId,
+      config.templateIdWelcome,
+      templateParams
+    );
+
+    console.log('Welcome email sent:', response);
+    return true;
+  } catch (error) {
+    console.error('Error sending welcome email:', error);
+    return false;
+  }
+}
+
+/**
+ * Send notification emails to all subscribers when a new article is published
+ */
+async function notifySubscribersNewArticle(article) {
+  try {
+    const config = getEmailJSConfig();
+    const subscribers = getSubscribers();
+
+    if (!config.serviceId || !config.templateIdWelcome || !config.publicKey) {
+      console.warn('EmailJS not configured. Skipping subscriber notifications.');
+      return { success: false, count: 0 };
+    }
+
+    if (subscribers.length === 0) {
+      console.log('No subscribers to notify');
+      return { success: true, count: 0 };
+    }
+
+    // Initialize EmailJS
+    emailjs.init(config.publicKey);
+
+    let successCount = 0;
+
+    // Send email to each subscriber
+    for (const email of subscribers) {
+      try {
+        const articleUrl = `${window.location.origin}/pages/article.html?id=${article.id}`;
+
+        const templateParams = {
+          to_email: email,  // Changed from user_email to to_email
+          to_name: email.split('@')[0],  // Changed from user_name to to_name
+          user_name: email.split('@')[0],  // Keep for backward compatibility
+          user_email: email,  // Keep for backward compatibility
+          subject: `New Article: ${article.title}`,
+          message: `A new article has been published on KloudVin!\n\nTitle: ${article.title}\n\nDescription: ${article.description}\n\nRead the full article here: ${articleUrl}\n\nHappy reading!`,
+          from_name: 'KloudVin',
+          article_title: article.title,
+          article_description: article.description,
+          article_url: articleUrl
+        };
+
+        await emailjs.send(
+          config.serviceId,
+          config.templateIdWelcome,
+          templateParams
+        );
+
+        successCount++;
+
+        // Add small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        console.error(`Error sending notification to ${email}:`, error);
+      }
+    }
+
+    console.log(`Sent ${successCount} of ${subscribers.length} notification emails`);
+    return { success: true, count: successCount, total: subscribers.length };
+  } catch (error) {
+    console.error('Error in notifySubscribersNewArticle:', error);
+    return { success: false, count: 0 };
   }
 }

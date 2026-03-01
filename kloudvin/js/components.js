@@ -75,13 +75,11 @@ function loadComponents(isSubPage) {
         <a href="${blogLink}">Blog</a>
         <a href="${aboutLink}">About</a>
         <a href="#">Privacy</a>
-        <a href="#">RSS</a>
       </div>
       <div class="footer-social">
-        <a href="#"><i class="fab fa-linkedin-in"></i></a>
-        <a href="#"><i class="fab fa-github"></i></a>
-        <a href="#"><i class="fab fa-x-twitter"></i></a>
-        <a href="#"><i class="fas fa-rss"></i></a>
+        <a href="https://www.linkedin.com/in/vinsvin/" target="_blank" rel="noopener noreferrer" title="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
+        <a href="https://github.com/KloudVin" target="_blank" rel="noopener noreferrer" title="GitHub"><i class="fab fa-github"></i></a>
+        <a href="https://x.com/vinswin" target="_blank" rel="noopener noreferrer" title="X (Twitter)"><i class="fab fa-x-twitter"></i></a>
         <button class="admin-lock" id="adminLock" onclick="openAdminLogin()" title="Admin"><i class="fas fa-lock"></i></button>
       </div>
     </div>
@@ -339,6 +337,63 @@ function loadComponents(isSubPage) {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>`);
+
+  // ======== CATEGORY MODAL (Add/Edit with Emoji Picker and Subcategories) ========
+  document.body.insertAdjacentHTML('beforeend', `
+  <div class="category-modal-overlay" id="categoryModalOverlay" onclick="closeCategoryModal()"></div>
+  <div class="category-modal" id="categoryModal">
+    <div class="category-modal-header">
+      <h3 id="categoryModalTitle"><i class="fas fa-tag"></i> Add Category</h3>
+      <button class="category-modal-close" onclick="closeCategoryModal()"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="category-modal-body">
+      <input type="hidden" id="editingCategoryId" value="">
+
+      <div class="form-group">
+        <label>Category Name</label>
+        <input type="text" id="categoryName" placeholder="e.g., Cloud Computing, DevOps" class="form-input">
+      </div>
+
+      <div class="form-group">
+        <label>Icon (Emoji)</label>
+        <div style="display:flex;gap:.5rem">
+          <input type="text" id="categoryIcon" placeholder="☁️" class="form-input" style="flex:1" maxlength="4">
+          <button class="btn-glow" onclick="toggleEmojiPicker()" style="background:rgba(139,92,246,.15);color:var(--neon-violet);border-color:rgba(139,92,246,.25);padding:.5rem 1rem">
+            <i class="fas fa-face-smile"></i> Pick Emoji
+          </button>
+        </div>
+        <div id="emojiPicker" style="display:none;margin-top:.5rem;background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:8px;padding:1rem;max-height:300px;overflow-y:auto">
+          <input type="text" id="emojiSearch" placeholder="🔍 Search emojis..." class="form-input" style="margin-bottom:.75rem;font-size:.9rem" oninput="filterEmojis(this.value)">
+          <div style="display:grid;grid-template-columns:repeat(8, 1fr);gap:8px" id="emojiGrid"></div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Description</label>
+        <textarea id="categoryDescription" placeholder="Brief description of this category" class="form-input" rows="2"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Subcategories <span style="color:var(--text-muted);font-size:.85rem">(Optional - e.g., Terraform, Ansible, Pulumi)</span></label>
+        <div id="subcategoriesList" style="display:flex;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem;min-height:32px"></div>
+        <div style="display:flex;gap:.5rem">
+          <input type="text" id="subcategoryInput" placeholder="Type subcategory name" class="form-input" style="flex:1" onkeypress="if(event.key==='Enter'){event.preventDefault();addSubcategory()}">
+          <button class="btn-glow" onclick="addSubcategory()" style="background:rgba(16,185,129,.15);color:var(--neon-emerald);border-color:rgba(16,185,129,.25);padding:.5rem 1rem">
+            <i class="fas fa-plus"></i> Add
+          </button>
+        </div>
+      </div>
+
+      <div class="category-modal-footer">
+        <button class="btn-glow" onclick="closeCategoryModal()" style="background:rgba(107,114,128,.1);color:var(--text-muted);border-color:rgba(107,114,128,.2);flex:1">
+          <i class="fas fa-times"></i> Cancel
+        </button>
+        <button class="btn-glow primary" id="saveCategoryBtn" onclick="saveCategoryFromModal()" style="flex:2">
+          <i class="fas fa-save"></i> Save Category
+        </button>
       </div>
     </div>
   </div>`);
