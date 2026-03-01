@@ -1533,10 +1533,15 @@ async function renderUsersList() {
   const users = await getAllUsers();
   const session = getUserSession();
   
+  console.log('👥 Rendering users list. Current session:', session);
+  console.log('👥 Users:', users);
+  
   list.innerHTML = '';
   
   users.forEach(u => {
     const isCurrentUser = session && session.userId === u.id;
+    console.log(`👤 User ${u.username} (ID: ${u.id}): isCurrentUser=${isCurrentUser}, session.userId=${session?.userId}`);
+    
     const item = document.createElement('div');
     item.className = 'manage-item';
     item.innerHTML = `
@@ -1551,10 +1556,8 @@ async function renderUsersList() {
         </div>
       </div>
       <div class="manage-item-actions">
-        ${isCurrentUser ? '' : `
-          <button class="manage-btn manage-btn-edit" data-id="${u.id}" title="Edit user"><i class="fas fa-edit"></i></button>
-          <button class="manage-btn manage-btn-del" data-id="${u.id}" title="Delete user"><i class="fas fa-trash"></i></button>
-        `}
+        <button class="manage-btn manage-btn-edit" data-id="${u.id}" title="Edit user"><i class="fas fa-edit"></i></button>
+        ${isCurrentUser ? '' : `<button class="manage-btn manage-btn-del" data-id="${u.id}" title="Delete user"><i class="fas fa-trash"></i></button>`}
       </div>`;
     list.appendChild(item);
   });
@@ -1580,18 +1583,30 @@ async function renderUsersList() {
   list.querySelectorAll('.manage-btn-edit').forEach(btn => {
     btn.addEventListener('click', function() {
       const userId = parseInt(this.dataset.id);
+      console.log('✏️ Edit button clicked for user ID:', userId);
       const user = users.find(u => u.id === userId);
+      console.log('✏️ Found user:', user);
       if (user) {
         editUser(user);
+      } else {
+        console.error('❌ User not found for ID:', userId);
       }
     });
   });
 }
 
 function editUser(user) {
+  console.log('✏️ editUser called with user:', user);
+  
   // Populate form with user data
   const usernameInput = document.getElementById('newUserUsername');
   const emailInput = document.getElementById('newUserEmail');
+  
+  if (!usernameInput || !emailInput) {
+    console.error('❌ Form inputs not found!');
+    showToast('Form not found. Please refresh the page.', true);
+    return;
+  }
   
   usernameInput.value = user.username;
   emailInput.value = user.email;
@@ -1601,6 +1616,8 @@ function editUser(user) {
   document.getElementById('newUserConfirmPassword').value = '';
   document.getElementById('newUserPassword').placeholder = 'Leave empty to keep current password';
   
+  console.log('✏️ Form populated with user data');
+  
   // Make username read-only (email can be edited)
   usernameInput.readOnly = true;
   usernameInput.style.opacity = '0.6';
@@ -1609,15 +1626,22 @@ function editUser(user) {
   // Change button text and set onclick with proper closure
   const btn = document.querySelector('#adminUsersView .btn-glow');
   if (btn) {
+    console.log('✏️ Updating button for edit mode');
     btn.innerHTML = '<i class="fas fa-save"></i> Update User';
     // Clone and replace to remove all event listeners
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
     // Set new onclick handler
-    document.querySelector('#adminUsersView .btn-glow').onclick = function() { updateUser(user.id); };
+    document.querySelector('#adminUsersView .btn-glow').onclick = function() { 
+      console.log('💾 Update button clicked for user ID:', user.id);
+      updateUser(user.id); 
+    };
+  } else {
+    console.error('❌ Button not found!');
   }
   
-  showToast('Edit mode: Username and email cannot be changed');
+  showToast('Edit mode: Username cannot be changed');
+  console.log('✏️ editUser complete. Ready to edit user ID:', user.id);
 }
 
 function cancelEdit() {
@@ -1653,12 +1677,16 @@ function cancelEdit() {
 }
 
 async function updateUser(userId) {
+  console.log('💾 updateUser called for user ID:', userId);
+  
   const username = document.getElementById('newUserUsername').value.trim();
   const email = document.getElementById('newUserEmail').value.trim();
   const password = document.getElementById('newUserPassword').value;
   const confirmPassword = document.getElementById('newUserConfirmPassword').value;
   const phone = document.getElementById('newUserPhone').value.trim();
   const role = document.getElementById('newUserRole').value;
+  
+  console.log('💾 Form values:', { username, email, phone, role, hasPassword: !!password });
   
   // Validation
   if (!username) { showToast('Please enter a username', true); return; }
@@ -1686,19 +1714,24 @@ async function updateUser(userId) {
     }
   }
   
+  console.log('✅ Validation passed. Calling updateExistingUser...');
+  
   try {
     const result = await updateExistingUser(userId, username, email, password, role, phone);
+    
+    console.log('💾 updateExistingUser result:', result);
     
     if (result.success) {
       showToast(`User "${username}" updated successfully!`);
       cancelEdit(); // Clear form and reset button
       await renderUsersList(); // Refresh user list
     } else {
+      console.error('❌ Update failed:', result.message);
       showToast(result.message || 'Failed to update user', true);
     }
   } catch (error) {
-    console.error('Error in updateUser:', error);
-    showToast('Failed to update user', true);
+    console.error('❌ Error in updateUser:', error);
+    showToast('Failed to update user: ' + error.message, true);
   }
 }
 

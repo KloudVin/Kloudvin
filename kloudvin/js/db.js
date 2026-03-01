@@ -375,6 +375,8 @@ async function deleteUser(userId) {
  * Update an existing user
  */
 async function updateExistingUser(userId, username, email, password, role, phone) {
+  console.log('🔄 updateExistingUser called:', { userId, username, email, role, phone, hasPassword: !!password });
+  
   try {
     const updateData = {
       role,
@@ -388,7 +390,8 @@ async function updateExistingUser(userId, username, email, password, role, phone
       updateData.password_hash = password;
     }
     
-    console.log('Updating user with data:', updateData);
+    console.log('🔄 Sending update request with data:', updateData);
+    console.log('🔄 URL:', `${DB_API_BASE}/users/${userId}`);
     
     const response = await fetch(`${DB_API_BASE}/users/${userId}`, {
       method: 'PATCH',
@@ -396,11 +399,11 @@ async function updateExistingUser(userId, username, email, password, role, phone
       body: JSON.stringify(updateData)
     });
     
-    console.log('Update response status:', response.status);
+    console.log('🔄 Response status:', response.status);
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Update error response:', errorText);
+      console.error('❌ Update error response:', errorText);
       try {
         const error = JSON.parse(errorText);
         return { success: false, message: error.error || error.message || 'Failed to update user' };
@@ -409,12 +412,15 @@ async function updateExistingUser(userId, username, email, password, role, phone
       }
     }
     
+    const result = await response.json();
+    console.log('✅ Update successful. Result:', result);
+    
     return { 
       success: true,
       note: 'User updated successfully'
     };
   } catch (error) {
-    console.error('Error updating user:', error);
+    console.error('❌ Error updating user:', error);
     return { success: false, message: error.message };
   }
 }
