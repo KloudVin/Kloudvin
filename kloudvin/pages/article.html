@@ -49,9 +49,9 @@
 <!-- EmailJS Library -->
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 
-<script src="../js/db.js?v=4"></script>
-<script src="../js/app.js?v=4"></script>
-<script src="../js/components.js?v=4"></script>
+<script src="../js/db.js?v=5"></script>
+<script src="../js/app.js?v=5"></script>
+<script src="../js/components.js?v=5"></script>
 <script>
 loadComponents(true);
 
@@ -80,6 +80,11 @@ var artId = params.get('id');
       '<span><i class="fas fa-user"></i> Vinod</span>';
 
     document.getElementById('articleBody').innerHTML = renderMarkdown(article.content || '');
+
+    // Make images clickable for zoom
+    setTimeout(() => {
+      initImageZoom();
+    }, 100);
 
     // Tags
     var tagsEl = document.getElementById('artTags');

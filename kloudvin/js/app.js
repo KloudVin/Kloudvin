@@ -902,7 +902,46 @@ async function handleUploadModeImageUpload(event) {
     if (result.success) {
       // Add to uploaded images list
       addUploadedImageToList(file.name, result.url);
-      showToast('Image uploaded successfully! ✅');
+      
+      // Auto-update image paths in uploaded content
+      if (uploadedFileContent) {
+        // Try to find and replace image references
+        const originalFilename = file.name;
+        const filenameWithoutExt = originalFilename.replace(/\.[^/.]+$/, '');
+        
+        // Common patterns for image references in markdown
+        const patterns = [
+          new RegExp(`!\\[([^\\]]*)\\]\\([^)]*${escapeRegex(originalFilename)}[^)]*\\)`, 'gi'),
+          new RegExp(`!\\[([^\\]]*)\\]\\([^)]*${escapeRegex(filenameWithoutExt)}[^)]*\\)`, 'gi'),
+          new RegExp(`<img[^>]*src=["'][^"']*${escapeRegex(originalFilename)}[^"']*["'][^>]*>`, 'gi')
+        ];
+        
+        let updated = false;
+        patterns.forEach(pattern => {
+          if (pattern.test(uploadedFileContent)) {
+            uploadedFileContent = uploadedFileContent.replace(pattern, (match) => {
+              // Extract alt text if it exists
+              const altMatch = match.match(/!\[([^\]]*)\]/);
+              const altText = altMatch ? altMatch[1] : 'image';
+              updated = true;
+              return `![${altText}](${result.url})`;
+            });
+          }
+        });
+        
+        if (updated) {
+          showToast(`Image uploaded and ${updated ? 'path updated' : 'added'} successfully! ✅`);
+          // Refresh preview if visible
+          const previewContent = document.getElementById('uploadPreviewContent');
+          if (previewContent && previewContent.style.display !== 'none') {
+            previewContent.innerHTML = renderMarkdown(uploadedFileContent);
+          }
+        } else {
+          showToast('Image uploaded! Copy URL to use in your content. 📋');
+        }
+      } else {
+        showToast('Image uploaded successfully! ✅');
+      }
     } else {
       throw new Error(result.error || 'Upload failed');
     }
@@ -913,6 +952,11 @@ async function handleUploadModeImageUpload(event) {
     // Reset file input
     event.target.value = '';
   }
+}
+
+// Helper function to escape regex special characters
+function escapeRegex(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function addUploadedImageToList(filename, url) {
@@ -1191,6 +1235,62 @@ function showToast(msg, isError, duration) {
 function initNavScroll() {
   const nav = document.getElementById('navbar');
   if (nav) window.addEventListener('scroll', () => nav.classList.toggle('compact', window.scrollY > 60));
+}
+
+// ---- IMAGE ZOOM LIGHTBOX ----
+function initImageZoom() {
+  // Create lightbox if it doesn't exist
+  let lightbox = document.getElementById('imageLightbox');
+  if (!lightbox) {
+    lightbox = document.createElement('div');
+    lightbox.id = 'imageLightbox';
+    lightbox.className = 'image-lightbox';
+    lightbox.innerHTML = `
+      <div class="image-lightbox-close" onclick="closeImageLightbox()">
+        <i class="fas fa-times"></i>
+      </div>
+      <img src="" alt="Zoomed image">
+    `;
+    document.body.appendChild(lightbox);
+    
+    // Close on background click
+    lightbox.addEventListener('click', function(e) {
+      if (e.target === lightbox) {
+        closeImageLightbox();
+      }
+    });
+    
+    // Close on ESC key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && lightbox.classList.contains('active')) {
+        closeImageLightbox();
+      }
+    });
+  }
+  
+  // Add click handlers to all images in article content
+  const articleImages = document.querySelectorAll('.article-content img');
+  articleImages.forEach(img => {
+    img.style.cursor = 'pointer';
+    img.addEventListener('click', function() {
+      openImageLightbox(this.src, this.alt);
+    });
+  });
+}
+
+function openImageLightbox(src, alt) {
+  const lightbox = document.getElementById('imageLightbox');
+  const img = lightbox.querySelector('img');
+  img.src = src;
+  img.alt = alt || 'Zoomed image';
+  lightbox.classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeImageLightbox() {
+  const lightbox = document.getElementById('imageLightbox');
+  lightbox.classList.remove('active');
+  document.body.style.overflow = '';
 }
 
 // ---- REVEAL ON SCROLL ----
@@ -2129,10 +2229,20 @@ async function editArticle(articleId) {
     }
     
     // Populate form
-    document.getElementById('artTitle').value = article.title;
-    document.getElementById('artDesc').value = article.description || article.desc || '';
-    document.getElementById('artCategory').value = article.category;
-    document.getElementById('artContent').value = article.content;
+    const titleEl = document.getElementById('artTitle');
+    const descEl = document.getElementById('artDesc');
+    const contentEl = document.getElementById('artContent');
+    const categoryEl = document.getElementById('artCategory');
+    
+    titleEl.value = article.title;
+    titleEl.readOnly = false; // Ensure title is editable
+    titleEl.disabled = false;
+    titleEl.style.opacity = '1';
+    titleEl.style.cursor = 'text';
+    
+    descEl.value = article.description || article.desc || '';
+    categoryEl.value = article.category;
+    contentEl.value = article.content;
     
     // Set tags
     currentTags = article.tags || [];
