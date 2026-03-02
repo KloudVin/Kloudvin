@@ -7,13 +7,16 @@ const config = {
     password: process.env.DB_PASSWORD || 'Vins@6579',
     options: {
         encrypt: true,
-        trustServerCertificate: false
+        trustServerCertificate: false,
+        connectTimeout: 30000,
+        requestTimeout: 30000
     },
     pool: {
         max: 10,
         min: 0,
         idleTimeoutMillis: 30000
-    }
+    },
+    connectionTimeout: 30000
 };
 
 let pool = null;
