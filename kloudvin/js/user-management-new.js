@@ -13,6 +13,8 @@ function showUsersList() {
 
 // Show user form view (create or edit)
 function showUserForm(mode, user = null) {
+  console.log('📝 showUserForm called with mode:', mode, 'user:', user);
+  
   document.getElementById('adminUsersView').style.display = 'none';
   document.getElementById('adminUserFormView').style.display = 'block';
   document.getElementById('adminLoginView').style.display = 'none';
@@ -28,6 +30,7 @@ function showUserForm(mode, user = null) {
   
   if (mode === 'edit' && user) {
     // Edit mode
+    console.log('📝 Setting up edit mode for user:', user.username);
     title.textContent = 'Edit User';
     desc.textContent = 'Update user details';
     submitBtn.innerHTML = '<i class="fas fa-save"></i> Update User';
@@ -47,8 +50,11 @@ function showUserForm(mode, user = null) {
     usernameInput.readOnly = true;
     usernameInput.style.opacity = '0.6';
     usernameInput.style.cursor = 'not-allowed';
+    
+    console.log('✅ Form populated with user data');
   } else {
     // Create mode
+    console.log('📝 Setting up create mode');
     title.textContent = 'Add New User';
     desc.textContent = 'Create a new user account';
     submitBtn.innerHTML = '<i class="fas fa-plus"></i> Create User';
@@ -132,10 +138,16 @@ async function renderUsersList() {
 
 // Edit user by ID
 async function editUserById(userId) {
+  console.log('✏️ editUserById called with ID:', userId);
   const users = await getAllUsers();
+  console.log('✏️ All users:', users);
   const user = users.find(u => u.id === userId);
+  console.log('✏️ Found user:', user);
   if (user) {
     showUserForm('edit', user);
+  } else {
+    console.error('❌ User not found for ID:', userId);
+    showToast('User not found', true);
   }
 }
 
@@ -155,12 +167,16 @@ async function deleteUserById(userId) {
 
 // Update user
 async function updateUser(userId) {
+  console.log('💾 updateUser (user-management-new.js) called for ID:', userId);
+  
   const username = document.getElementById('newUserUsername').value.trim();
   const email = document.getElementById('newUserEmail').value.trim();
   const password = document.getElementById('newUserPassword').value;
   const confirmPassword = document.getElementById('newUserConfirmPassword').value;
   const phone = document.getElementById('newUserPhone').value.trim();
   const role = document.getElementById('newUserRole').value;
+  
+  console.log('💾 Form values:', { username, email, phone, role, hasPassword: !!password });
   
   // Validation
   if (!username) { showToast('Please enter a username', true); return; }
@@ -188,18 +204,23 @@ async function updateUser(userId) {
     }
   }
   
+  console.log('✅ Validation passed. Calling updateExistingUser...');
+  
   try {
     const result = await updateExistingUser(userId, username, email, password, role, phone);
+    
+    console.log('💾 updateExistingUser result:', result);
     
     if (result.success) {
       showToast(`User updated successfully!`);
       showUsersList(); // Go back to list view
     } else {
+      console.error('❌ Update failed:', result.message);
       showToast(result.message || 'Failed to update user', true);
     }
   } catch (error) {
-    console.error('Error in updateUser:', error);
-    showToast('Failed to update user', true);
+    console.error('❌ Error in updateUser:', error);
+    showToast('Failed to update user: ' + error.message, true);
   }
 }
 

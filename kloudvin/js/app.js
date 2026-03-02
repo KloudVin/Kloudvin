@@ -972,7 +972,7 @@ function addUploadedImageToList(filename, url) {
       <div class="uploaded-image-url">${url}</div>
     </div>
     <div class="uploaded-image-actions">
-      <button class="btn-copy-url" onclick="copyImageUrl('${url}')">
+      <button class="btn-copy-url copy-url-btn" data-url="${url}" onclick="copyImageUrl('${url}')">
         <i class="fas fa-copy"></i> Copy URL
       </button>
     </div>
@@ -2228,29 +2228,63 @@ async function editArticle(articleId) {
       console.log('✅ Updated editor header');
     }
     
-    // Populate form
-    const titleEl = document.getElementById('artTitle');
-    const descEl = document.getElementById('artDesc');
-    const contentEl = document.getElementById('artContent');
-    const categoryEl = document.getElementById('artCategory');
-    
-    titleEl.value = article.title;
-    titleEl.readOnly = false; // Ensure title is editable
-    titleEl.disabled = false;
-    titleEl.style.opacity = '1';
-    titleEl.style.cursor = 'text';
-    
-    descEl.value = article.description || article.desc || '';
-    categoryEl.value = article.category;
-    contentEl.value = article.content;
-    
-    // Set tags
-    currentTags = article.tags || [];
-    renderTags();
-    
-    console.log('✅ Article loaded for editing. editingArticleId:', window.editingArticleId);
-    console.log('✅ Verify window.editingArticleId is still set:', window.editingArticleId);
-    showToast('Editing article: ' + article.title);
+    // Populate form - wait a bit for DOM to be ready
+    setTimeout(() => {
+      const titleEl = document.getElementById('artTitle');
+      const descEl = document.getElementById('artDesc');
+      const contentEl = document.getElementById('artContent');
+      const categoryEl = document.getElementById('artCategory');
+      
+      if (!titleEl) {
+        console.error('❌ Title element not found!');
+        return;
+      }
+      
+      console.log('📝 Title element found:', titleEl);
+      console.log('📝 Title element readonly before:', titleEl.readOnly);
+      console.log('📝 Title element disabled before:', titleEl.disabled);
+      
+      titleEl.value = article.title;
+      titleEl.readOnly = false; // Ensure title is editable
+      titleEl.disabled = false;
+      titleEl.removeAttribute('readonly');
+      titleEl.removeAttribute('disabled');
+      titleEl.style.opacity = '1';
+      titleEl.style.cursor = 'text';
+      titleEl.style.pointerEvents = 'auto';
+      titleEl.style.backgroundColor = '';
+      
+      console.log('📝 Title element readonly after:', titleEl.readOnly);
+      console.log('📝 Title element disabled after:', titleEl.disabled);
+      console.log('📝 Title element value:', titleEl.value);
+      console.log('📝 Title element attributes:', {
+        readonly: titleEl.getAttribute('readonly'),
+        disabled: titleEl.getAttribute('disabled'),
+        contenteditable: titleEl.getAttribute('contenteditable')
+      });
+      console.log('📝 Title element computed style:', {
+        pointerEvents: window.getComputedStyle(titleEl).pointerEvents,
+        userSelect: window.getComputedStyle(titleEl).userSelect,
+        cursor: window.getComputedStyle(titleEl).cursor
+      });
+      
+      descEl.value = article.description || article.desc || '';
+      categoryEl.value = article.category;
+      contentEl.value = article.content;
+      
+      // Set tags
+      currentTags = article.tags || [];
+      renderTags();
+      
+      console.log('✅ Article loaded for editing. editingArticleId:', window.editingArticleId);
+      console.log('✅ Verify window.editingArticleId is still set:', window.editingArticleId);
+      
+      // Try to focus the title field to test if it's editable
+      titleEl.focus();
+      console.log('✅ Focused title field');
+      
+      showToast('Editing article: ' + article.title);
+    }, 100);
     
   } catch (error) {
     console.error('❌ Error loading article for edit:', error);
@@ -3143,4 +3177,180 @@ async function notifySubscribersNewArticle(article) {
     console.error('Error in notifySubscribersNewArticle:', error);
     return { success: false, count: 0 };
   }
+}
+
+
+// ---- IMAGE BROWSER ----
+let allUploadedImages = [];
+
+// Open image browser modal
+async function openImageBrowser() {
+  // Check if editor is open
+  const editorPanel = document.getElementById('editorPanel');
+  if (!editorPanel || !editorPanel.classList.contains('open')) {
+    showToast('Please open the editor first', true);
+    return;
+  }
+  
+  const overlay = document.getElementById('imageBrowserOverlay');
+  const modal = document.getElementById('imageBrowserModal');
+  
+  if (!overlay || !modal) {
+    console.error('Image browser elements not found');
+    return;
+  }
+  
+  overlay.classList.add('open');
+  modal.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  
+  // Load images
+  await loadUploadedImages();
+}
+
+// Close image browser modal
+function closeImageBrowser() {
+  const overlay = document.getElementById('imageBrowserOverlay');
+  const modal = document.getElementById('imageBrowserModal');
+  
+  if (overlay) overlay.classList.remove('open');
+  if (modal) modal.classList.remove('open');
+  document.body.style.overflow = '';
+  
+  // Clear search
+  const searchInput = document.getElementById('imageBrowserSearch');
+  if (searchInput) searchInput.value = '';
+}
+
+// Add ESC key listener for image browser
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    const modal = document.getElementById('imageBrowserModal');
+    if (modal && modal.classList.contains('open')) {
+      closeImageBrowser();
+    }
+  }
+});
+
+// Load all uploaded images from Azure Blob Storage
+async function loadUploadedImages() {
+  const content = document.getElementById('imageBrowserContent');
+  content.innerHTML = '<div style="text-align:center;padding:2rem;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> Loading images...</div>';
+  
+  try {
+    // Fetch images from Azure Function
+    const response = await fetch(`${DB_API_BASE}/images`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch images');
+    }
+    
+    const data = await response.json();
+    allUploadedImages = data.images || [];
+    
+    console.log(`📸 Loaded ${allUploadedImages.length} images from Azure Storage`);
+    
+    renderImageGallery(allUploadedImages);
+  } catch (error) {
+    console.error('Error loading images:', error);
+    content.innerHTML = `
+      <div class="image-gallery-empty">
+        <i class="fas fa-exclamation-triangle"></i>
+        <p>Failed to load images</p>
+        <p style="font-size:0.85rem;margin-top:0.5rem;color:var(--neon-red)">${error.message}</p>
+      </div>
+    `;
+  }
+}
+
+// Render image gallery
+function renderImageGallery(images) {
+  const content = document.getElementById('imageBrowserContent');
+  
+  if (images.length === 0) {
+    content.innerHTML = `
+      <div class="image-gallery-empty">
+        <i class="fas fa-images"></i>
+        <p>No images uploaded yet</p>
+        <p style="font-size:0.85rem;margin-top:0.5rem">Upload images to see them here</p>
+      </div>
+    `;
+    return;
+  }
+  
+  const gallery = document.createElement('div');
+  gallery.className = 'image-gallery';
+  
+  images.forEach((img, index) => {
+    const item = document.createElement('div');
+    item.className = 'image-gallery-item';
+    item.innerHTML = `
+      <img src="${img.url}" alt="${img.filename}" loading="lazy">
+      <div class="image-gallery-item-overlay">
+        <div class="image-gallery-item-name" title="${img.filename}">${img.filename}</div>
+        <div class="image-gallery-item-actions">
+          <button class="image-gallery-item-btn" onclick="insertImageFromBrowser('${img.url}', '${img.filename}')">
+            <i class="fas fa-plus"></i> Insert
+          </button>
+          <button class="image-gallery-item-btn" onclick="copyImageUrlFromBrowser('${img.url}')">
+            <i class="fas fa-copy"></i> Copy
+          </button>
+        </div>
+      </div>
+    `;
+    gallery.appendChild(item);
+  });
+  
+  content.innerHTML = '';
+  content.appendChild(gallery);
+}
+
+// Filter image gallery by search term
+function filterImageGallery(searchTerm) {
+  const filtered = allUploadedImages.filter(img => 
+    img.filename.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+  renderImageGallery(filtered);
+}
+
+// Insert image from browser into content
+function insertImageFromBrowser(url, filename) {
+  const altText = filename.replace(/\.[^/.]+$/, ''); // Remove extension
+  const markdown = `![${altText}](${url})`;
+  
+  if (editorMode === 'write') {
+    // Insert into write mode editor
+    const contentEl = document.getElementById('artContent');
+    if (contentEl) {
+      const cursorPos = contentEl.selectionStart;
+      const textBefore = contentEl.value.substring(0, cursorPos);
+      const textAfter = contentEl.value.substring(cursorPos);
+      contentEl.value = textBefore + '\n' + markdown + '\n' + textAfter;
+      contentEl.focus();
+      contentEl.selectionStart = contentEl.selectionEnd = cursorPos + markdown.length + 2;
+    }
+  } else if (editorMode === 'upload') {
+    // Insert into upload mode content
+    if (uploadedFileContent) {
+      uploadedFileContent += '\n' + markdown + '\n';
+      // Update preview
+      const previewContent = document.getElementById('uploadPreviewContent');
+      if (previewContent && previewContent.style.display !== 'none') {
+        previewContent.innerHTML = renderMarkdown(uploadedFileContent);
+      }
+    }
+  }
+  
+  showToast(`Image inserted: ${filename} ✅`);
+  closeImageBrowser();
+}
+
+// Copy image URL from browser
+function copyImageUrlFromBrowser(url) {
+  navigator.clipboard.writeText(url).then(() => {
+    showToast('Image URL copied to clipboard! 📋');
+  }).catch(err => {
+    console.error('Failed to copy:', err);
+    showToast('Failed to copy URL', true);
+  });
 }

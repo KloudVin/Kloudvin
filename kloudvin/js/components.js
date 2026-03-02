@@ -452,11 +452,12 @@ function loadComponents(isSubPage) {
           <button title="Link" onclick="insertMd('[','](url)')"><i class="fas fa-link"></i></button>
           <button title="Quote" onclick="insertMd('\\n> ','')"><i class="fas fa-quote-left"></i></button>
           <div class="toolbar-sep"></div>
-          <button title="Upload Image" onclick="triggerImageUpload()"><i class="fas fa-image"></i></button>
+          <button title="Upload Image" onclick="triggerImageUpload()"><i class="fas fa-cloud-arrow-up"></i></button>
+          <button title="Browse Images" onclick="openImageBrowser()" style="background:rgba(139,92,246,.1);border-color:rgba(139,92,246,.3)"><i class="fas fa-images"></i></button>
         </div>
         <input type="file" id="imageUploadInput" accept="image/*" style="display:none" onchange="handleImageUpload(event)">
         <textarea class="form-textarea" id="artContent" placeholder="Write your article in Markdown...&#10;&#10;## Introduction&#10;Start writing here...&#10;&#10;\`\`\`bash&#10;kubectl apply -f deploy.yaml&#10;\`\`\`"></textarea>
-        <div class="form-hint"><i class="fas fa-circle-info"></i> Supports Markdown: **bold**, *italic*, \`code\`, ## headings</div>
+        <div class="form-hint"><i class="fas fa-circle-info"></i> Supports Markdown: **bold**, *italic*, \`code\`, ## headings, images</div>
       </div>
     </div>
 
@@ -497,11 +498,16 @@ function loadComponents(isSubPage) {
         <label class="form-label">Upload Images <span style="color:var(--neon-cyan);font-size:.7rem;text-transform:none;letter-spacing:0">(for use in your article)</span></label>
         <div class="image-upload-section">
           <input type="file" id="uploadModeImageInput" accept="image/*" style="display:none" onchange="handleUploadModeImageUpload(event)">
-          <button class="btn-upload-image" onclick="document.getElementById('uploadModeImageInput').click()">
-            <i class="fas fa-image"></i> Upload Image
-          </button>
+          <div style="display:flex;gap:0.5rem">
+            <button class="btn-upload-image" onclick="document.getElementById('uploadModeImageInput').click()" style="flex:1">
+              <i class="fas fa-cloud-arrow-up"></i> Upload New
+            </button>
+            <button class="btn-upload-image" onclick="openImageBrowser()" style="flex:1;background:rgba(139,92,246,.1);border-color:rgba(139,92,246,.3)">
+              <i class="fas fa-images"></i> Browse Images
+            </button>
+          </div>
           <div class="form-hint" style="margin-top:8px">
-            <i class="fas fa-circle-info"></i> Upload images and copy the URL to use in your markdown
+            <i class="fas fa-circle-info"></i> Upload new images or browse previously uploaded ones
           </div>
         </div>
         <!-- Uploaded images list -->
@@ -518,6 +524,28 @@ function loadComponents(isSubPage) {
   // Toast
   document.body.insertAdjacentHTML('beforeend', `
   <div class="toast" id="toast"><i class="fas fa-check-circle"></i> <span id="toastMsg"></span></div>`);
+
+  // ======== IMAGE BROWSER MODAL ========
+  document.body.insertAdjacentHTML('beforeend', `
+  <div class="image-browser-overlay" id="imageBrowserOverlay" onclick="closeImageBrowser()"></div>
+  <div class="image-browser-modal" id="imageBrowserModal">
+    <div class="image-browser-header">
+      <h3><i class="fas fa-images"></i> Browse Uploaded Images</h3>
+      <button class="image-browser-close" onclick="closeImageBrowser()">
+        <i class="fas fa-xmark"></i>
+      </button>
+    </div>
+    <div class="image-browser-search">
+      <input type="text" id="imageBrowserSearch" placeholder="Search images..." onkeyup="filterImageGallery(this.value)">
+      <i class="fas fa-search"></i>
+    </div>
+    <div class="image-browser-content" id="imageBrowserContent">
+      <div style="text-align:center;padding:2rem;color:var(--text-muted)">
+        <i class="fas fa-spinner fa-spin"></i> Loading images...
+      </div>
+    </div>
+  </div>
+  `);
 }
 
 function previewArticle() {
