@@ -1,0 +1,14 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "AzureWebJobsStorage": "",
+    "SQL_CONNECTION_STRING": "Driver={ODBC Driver 18 for SQL Server};Server=tcp:YOUR_SERVER.database.windows.net,1433;Database=YOUR_DB;Uid=YOUR_USER;Pwd=YOUR_PASSWORD;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;",
+    "JWT_SECRET": "REPLACE_WITH_64_CHAR_HEX_STRING",
+    "ADMIN_EMAIL": "admin@kloudvin.com",
+    "ADMIN_PASSWORD": "REPLACE_WITH_SECURE_PASSWORD"
+  },
+  "Host": {
+    "CORS": "*"
+  }
+}

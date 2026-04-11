@@ -1,0 +1,20 @@
+trigger:
+  - main
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+    submodules: true
+
+  - task: AzureStaticWebApp@0
+    inputs:
+      # Path to your React frontend source
+      app_location: '/frontend'
+      # Path to your Azure Functions API
+      api_location: '/api'
+      # Build output directory (React default)
+      output_location: 'build'
+    env:
+      azure_static_web_apps_api_token: $(DEPLOYMENT_TOKEN)

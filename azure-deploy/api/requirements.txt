@@ -1,0 +1,5 @@
+azure-functions
+pyodbc
+pyjwt
+bcrypt
+python-slugify

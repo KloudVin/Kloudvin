@@ -1,0 +1,11 @@
+# Azure deployment specific
+api/local.settings.json
+api/__pycache__/
+api/.python_packages/
+api/.venv/
+frontend/node_modules/
+frontend/build/
+.env
+*.pyc
+__pycache__/
+.DS_Store
